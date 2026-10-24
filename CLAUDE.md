@@ -12,7 +12,9 @@ Instruções permanentes para o Claude Code neste repositório. Leia este arquiv
 - **Navegação:** Expo Router (entrada `expo-router/entry` no `package.json`, plugin `expo-router` no `app.json`), com rotas tipadas (`experiments.typedRoutes`). Os tipos (`.expo/types`, `expo-env.d.ts`) são gerados pelo `expo start` e ignorados no Git.
 - **Execução:** `expo-dev-client` instalado; `npm start` abre em development build (Expo Go só com `npx expo start --go`).
 - **EAS:** projeto vinculado via `app.json` (`extra.eas.projectId` e `owner`). O `eas.json` define os perfis de build `development` (development build com `expo-dev-client`, distribuição interna), `preview` (distribuição interna) e `production` (versão gerenciada remotamente, com `autoIncrement`).
-- **Backend:** existe um backend em .NET/C#, mas a integração é uma etapa futura. Não há endpoints, contratos, autenticação ou infraestrutura definidos neste repositório. Não invente nenhum desses detalhes.
+- **Backend:** MiCash.API em .NET/C#, código em `C:\Workspace\Project MiCash\Repos\micash-api` (contratos em `src/MiCash.Communication`). JSON em camelCase; erros como `{ "errorMessages": string[] }`; idioma via `Accept-Language`. Consulte o código do backend antes de integrar um endpoint; não invente contratos. Não altere o backend a partir deste repositório.
+- **Integração atual:** `POST /login` e `POST /api/user/register` (o cadastro devolve os mesmos tokens do login e já autentica); leitura autenticada de `GET /api/dashboard/monthly-summary`, `GET /api/dashboard/lastest-expenses` e `GET /api/income` (Dashboard e Transações) e `GET /api/dashboard/expenses-by-category` (Relatórios; `src/lib/reports.ts`); perfil e conta com `GET /api/user/profile`, `PUT /api/user/update`, `PUT /api/user/change-password` (`src/lib/user.ts`); assinatura com `GET /api/subscription/current`, `GET /api/plan` e `POST /api/checkout` (`src/lib/subscription.ts`; o checkout só abre o link do Pagar.me — a ativação vem do webhook no backend); `POST /logout` revoga o refresh token (`logout()` em `src/lib/auth.ts`); criação com `POST /api/income`, `POST /api/expense` e categorias de despesa (`GET /api/category/all`, `GET|PUT|DELETE /api/category/{id}`, `POST /api/category/create`; `src/lib/categories.ts`). `DELETE` só inativa a categoria; categorias não têm tipo na API (são todas de despesa) e as de receita são o enum fixo `IncomeCategory`. Escrita autenticada via `useAuthenticatedAction` (`src/hooks`). URL base em `EXPO_PUBLIC_API_URL` (`.env`, ver `.env.example`); cliente em `src/lib/api.ts` (`apiPost`, `apiGet` com Bearer e 204 → `null`); sessão (`name`, `token`, `refreshToken`) salva com `expo-secure-store` em `src/lib/auth.ts`. Telas autenticadas carregam dados com `useAuthenticatedQuery` (`src/hooks`), que trata 401 apagando a sessão e voltando ao Login. O app ainda não usa `/refresh`.
+- **Datas da API:** `DateOnly` ("AAAA-MM-DD") é usado como está; `DateTime` com fuso (ex.: `expenseDate` em UTC) é convertido para o dia local. Sempre use `toDateKey` (`src/utils/format.ts`).
 
 ### Versões instaladas
 
@@ -28,17 +30,17 @@ Confirme sempre no `package.json` / `node_modules` antes de usar uma API; essa t
 
 ## Estrutura
 
-| Pasta            | Finalidade                                                               |
-| ---------------- | ------------------------------------------------------------------------ |
-| `app/`           | Rotas do Expo Router. `_layout.tsx` é a raiz (um `Stack` sem cabeçalho). |
-| `src/components` | Componentes reutilizáveis.                                               |
-| `src/constants`  | Constantes da aplicação.                                                 |
-| `src/hooks`      | Hooks customizados.                                                      |
-| `src/lib`        | Configuração e wrappers de bibliotecas de terceiros.                     |
-| `src/types`      | Tipos TypeScript compartilhados.                                         |
-| `src/utils`      | Funções utilitárias puras.                                               |
-| `assets/`        | Imagens (`images/`) e fontes (`fonts/`).                                 |
-| `docs/`          | Documentação técnica (`architecture.md`).                                |
+| Pasta            | Finalidade                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/`           | Rotas do Expo Router. `_layout.tsx` é a raiz (um `Stack` sem cabeçalho); `app/(tabs)/` é a área autenticada com a barra inferior (`home`, `transactions`, `reports`, `profile`); `categories` é aba oculta (`href: null`), aberta pelo Perfil; `new-transaction` (`?type=` receita ou despesa) e `category-form` (`?id=` para editar) ficam fora das abas, assim como as telas do Perfil (`personal-data`, `change-password`, `notifications`, `subscription`, `settings`). |
+| `src/components` | Componentes reutilizáveis.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `src/constants`  | Constantes da aplicação.                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `src/hooks`      | Hooks customizados.                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `src/lib`        | Configuração e wrappers de bibliotecas de terceiros.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `src/types`      | Tipos TypeScript compartilhados.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `src/utils`      | Funções utilitárias puras.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `assets/`        | Imagens (`images/`) e fontes (`fonts/`).                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `docs/`          | Documentação técnica (`architecture.md`).                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Convenções:
 
@@ -66,7 +68,7 @@ Convenções:
 
 Observações verificadas:
 
-- Ainda não há nenhum teste; `npm test` passa sem executar nada.
+- Há testes unitários para `src/lib/*` e `src/utils/*`; ainda não há testes de tela.
 - O Prettier ignora `assets/` e `package-lock.json` (`.prettierignore`).
 - Node: versão de referência em `.nvmrc` (24); `engines` exige `>=20`.
 - CI (`.github/workflows/ci.yml`) roda `typecheck`, `lint`, `format:check` e `test` em push na `main` e em PRs. Mantenha esses comandos passando.
@@ -82,6 +84,20 @@ Observações verificadas:
 - Evite duplicação e abstrações prematuras.
 - Antes de criar um arquivo ou componente, procure se já existe algo equivalente.
 - Não adicione dependências sem justificar a necessidade na resposta.
+
+### Interface
+
+- Referência visual: protótipos em `C:\Workspace\Project MiCash\Docs` (`micash_NN_*.html` e `MiCash-Telas.jpg`), fora do repositório. Reproduza com componentes nativos; não copie HTML/CSS.
+- Cores só via `src/constants/colors.ts`; fontes só via `fonts.*` de `src/constants/typography.ts` (`fontFamily`, nunca `fontWeight`).
+- Ícones Tabler importados um a um: `import IconMail from '@tabler/icons-react-native/IconMail'`. Nunca importe do índice `@tabler/icons-react-native` (adiciona ~5 MB ao bundle).
+- Reutilize os componentes de `src/components` antes de criar equivalentes: `AppLogo`, `TextField` (`hideLabel`, `variant="white"`), `PrimaryButton`, `PasswordVisibilityToggle`, `BottomNav`, `AddTransactionSheet`, `TransactionRow`, `Skeleton`/`TransactionRowSkeleton`, `ErrorNotice`, `BottomSheet`, `FieldShell` (moldura comum dos campos), `SelectField` (com `icon` por opção e `action`), `DateField`, `SegmentedControl`, `CategoryIcon`, `DonutChart` e `BarChart` (gráficos com `react-native-svg`/`View`, sem biblioteca de gráficos), `ScreenHeader`, `MenuRow` e `Avatar`.
+- Configurações locais (sem backend) ficam em `src/lib/settings.ts` (`expo-secure-store`): `showBalance` e `biometrics`. A biometria (`expo-local-authentication`, `src/lib/biometrics.ts`) é uma trava local na Splash; não substitui o login na API.
+- Consultas mensais usam `MonthPeriod` e os utilitários de `src/utils/period.ts`.
+- Categorias gravam `icon` como nome de ícone Tabler (`CATEGORY_ICONS`) e `color` em hexadecimal (`CATEGORY_COLORS`); valores fora desse padrão aparecem com ícone/cor padrão.
+- Enums da API são enviados como número, com os valores do backend (`src/types/transactions.ts`); nunca use a posição na lista como valor. Categorias de despesa são do usuário e vêm da API, não de um enum.
+- Valores monetários são editados em centavos inteiros (`parseCentsInput`) e convertidos com `centsToAmount` só no envio.
+- Novas abas entram em `app/(tabs)/` e na `BottomNav`; itens sem tela mostram "Em breve" (sem telas vazias).
+- Validações de formulário ficam em `src/utils/validation.ts` e devem espelhar as regras da API (ex.: `isValidPassword` = `PasswordValidator` do backend).
 
 ### React Native e Expo
 
@@ -111,10 +127,10 @@ Observações verificadas:
 
 ## Limites do estágio atual
 
-O projeto está na fase de infraestrutura inicial. Até que uma tarefa autorize explicitamente:
+O projeto está no início do desenvolvimento das telas. Login, cadastro, Dashboard, Transações, Relatórios, o cadastro de receitas e despesas, o gerenciamento de categorias e o módulo Perfil já estão integrados (ver "Integração atual"). Até que uma tarefa autorize explicitamente:
 
-- Não implemente autenticação.
-- Não crie integrações com APIs nem cliente HTTP.
+- Não amplie a autenticação (refresh, login social, recuperação de senha, aceite de Termos de Uso/Política de Privacidade).
+- Não integre outros endpoints da API (ex.: edição/exclusão de movimentações).
 - Não desenvolva services ou repositórios de acesso a dados.
 - Não implemente regras de negócio.
 - Não configure bancos de dados ou estado global.

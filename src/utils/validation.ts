@@ -1,0 +1,161 @@
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Validação apenas de formato, sem verificar se o e-mail existe. */
+export function isValidEmail(value: string): boolean {
+  return EMAIL_PATTERN.test(value.trim());
+}
+
+export const PASSWORD_REQUIREMENTS =
+  'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, letra minúscula, número e um destes caracteres: ! ? * .';
+
+/**
+ * Espelha o PasswordValidator da MiCash.API: mínimo de 8 caracteres, com maiúscula,
+ * minúscula, número e um dos caracteres especiais aceitos pela API (! ? * .).
+ */
+export function isValidPassword(value: string): boolean {
+  return (
+    value.length >= 8 &&
+    /[A-Z]/.test(value) &&
+    /[a-z]/.test(value) &&
+    /[0-9]/.test(value) &&
+    /[!?*.]/.test(value)
+  );
+}
+
+export type RegisterFormValues = {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+};
+
+export type RegisterFormErrors = Partial<Record<keyof RegisterFormValues, string>>;
+
+export function validateRegisterForm(values: RegisterFormValues): RegisterFormErrors {
+  const errors: RegisterFormErrors = {};
+
+  if (!values.name.trim()) errors.name = 'Informe seu nome completo.';
+
+  if (!values.email.trim()) errors.email = 'Informe seu e-mail.';
+  else if (!isValidEmail(values.email)) errors.email = 'E-mail inválido.';
+
+  if (!values.password) errors.password = 'Informe uma senha.';
+  else if (!isValidPassword(values.password)) errors.password = PASSWORD_REQUIREMENTS;
+
+  if (!values.confirmPassword) errors.confirmPassword = 'Confirme sua senha.';
+  else if (values.confirmPassword !== values.password)
+    errors.confirmPassword = 'As senhas não coincidem.';
+
+  return errors;
+}
+
+export type TransactionKind = 'income' | 'expense';
+
+export type TransactionFormValues = {
+  title: string;
+  amountCents: number;
+  /** "AAAA-MM-DD" */
+  date: string;
+  /** Receita: valor do enum IncomeCategory. Despesa: id da categoria do usuário. */
+  category?: number;
+  /** Só despesa: valor do enum PaymentType. */
+  paymentType?: number;
+};
+
+export type TransactionFormErrors = Partial<
+  Record<'title' | 'amount' | 'date' | 'category' | 'paymentType', string>
+>;
+
+/**
+ * Espelha IncomeValidator/ExpenseValidator da API (título obrigatório, valor > 0, despesa sem
+ * data futura) e exige as escolhas que a API não valida, mas sem as quais o registro fica inválido
+ * (categoria de receita fora do enum, categoria de despesa inexistente).
+ */
+export function validateTransactionForm(
+  kind: TransactionKind,
+  values: TransactionFormValues,
+  today: string,
+): TransactionFormErrors {
+  const errors: TransactionFormErrors = {};
+
+  if (!values.title.trim()) errors.title = 'Informe uma descrição.';
+  if (values.amountCents <= 0) errors.amount = 'Informe um valor maior que zero.';
+
+  if (!values.date) errors.date = 'Informe a data.';
+  else if (kind === 'expense' && values.date > today)
+    errors.date = 'A data da despesa não pode ser futura.';
+
+  if (values.category === undefined) errors.category = 'Selecione uma categoria.';
+  if (kind === 'expense' && values.paymentType === undefined)
+    errors.paymentType = 'Selecione a forma de pagamento.';
+
+  return errors;
+}
+
+export type CategoryFormValues = {
+  name: string;
+  icon?: string;
+  color?: string;
+};
+
+export type CategoryFormErrors = Partial<Record<keyof CategoryFormValues, string>>;
+
+/** Nome, ícone e cor são obrigatórios na criação (CategoryValidator); a edição na API não valida. */
+export function validateCategoryForm(values: CategoryFormValues): CategoryFormErrors {
+  const errors: CategoryFormErrors = {};
+  if (!values.name.trim()) errors.name = 'Informe o nome da categoria.';
+  if (!values.icon) errors.icon = 'Escolha um ícone.';
+  if (!values.color) errors.color = 'Escolha uma cor.';
+  return errors;
+}
+
+export type ProfileFormErrors = Partial<Record<'name' | 'email', string>>;
+
+/** Espelha o UpdateUserValidator da API (nome obrigatório, e-mail obrigatório e válido). */
+export function validateProfileForm(values: { name: string; email: string }): ProfileFormErrors {
+  const errors: ProfileFormErrors = {};
+  if (!values.name.trim()) errors.name = 'Informe seu nome completo.';
+  if (!values.email.trim()) errors.email = 'Informe seu e-mail.';
+  else if (!isValidEmail(values.email)) errors.email = 'E-mail inválido.';
+  return errors;
+}
+
+export type ChangePasswordFormValues = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+export type ChangePasswordFormErrors = Partial<Record<keyof ChangePasswordFormValues, string>>;
+
+/** A senha atual é conferida pela API; a nova segue o mesmo PasswordValidator do cadastro. */
+export function validateChangePasswordForm(
+  values: ChangePasswordFormValues,
+): ChangePasswordFormErrors {
+  const errors: ChangePasswordFormErrors = {};
+  if (!values.currentPassword) errors.currentPassword = 'Informe a senha atual.';
+  if (!values.newPassword) errors.newPassword = 'Informe a nova senha.';
+  else if (!isValidPassword(values.newPassword)) errors.newPassword = PASSWORD_REQUIREMENTS;
+  if (!values.confirmPassword) errors.confirmPassword = 'Confirme a nova senha.';
+  else if (values.confirmPassword !== values.newPassword)
+    errors.confirmPassword = 'As senhas não coincidem.';
+  return errors;
+}
+
+export type PasswordStrength = 'fraca' | 'média' | 'forte';
+
+/**
+ * Força exibida no formulário, contando quantas das 5 exigências da API a senha cumpre
+ * (8+ caracteres, maiúscula, minúscula, número, especial). "forte" = aceita pela API.
+ */
+export function passwordStrength(value: string): { level: PasswordStrength; score: number } {
+  const score = [
+    value.length >= 8,
+    /[A-Z]/.test(value),
+    /[a-z]/.test(value),
+    /[0-9]/.test(value),
+    /[!?*.]/.test(value),
+  ].filter(Boolean).length;
+  const level: PasswordStrength = score === 5 ? 'forte' : score >= 3 ? 'média' : 'fraca';
+  return { level, score };
+}

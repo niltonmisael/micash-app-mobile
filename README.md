@@ -14,7 +14,24 @@ Aplicativo mobile do MiCash, em React Native + TypeScript com Expo e Expo Router
 
 ```bash
 npm install
+cp .env.example .env   # e ajuste EXPO_PUBLIC_API_URL
 ```
+
+## Backend (MiCash.API) em desenvolvimento
+
+O desenvolvimento usa o **emulador Android**, que acessa o `localhost` do PC pelo endereço `10.0.2.2`. Assim a API continua escutando só em `localhost`, sem porta aberta na rede.
+
+1. Rode a API com o perfil `http` (na pasta do `micash-api`):
+
+   ```bash
+   dotnet run --project src/MiCash.API --launch-profile http
+   ```
+
+   Use o perfil `http`, não o `https`: com o `https`, a porta 5203 redireciona para `https://...:7132`, cujo certificado de desenvolvimento o Android não aceita.
+
+2. Em `.env`, use `EXPO_PUBLIC_API_URL=http://10.0.2.2:5203`. Depois de alterar o `.env`, reinicie o `npm start`.
+
+Não exponha a porta da API na rede (`--urls http://0.0.0.0:...` ou regra no firewall).
 
 ## Executando no aparelho
 

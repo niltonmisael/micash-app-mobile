@@ -1,0 +1,109 @@
+const REQUEST_TIMEOUT_MS = 15000;
+
+const UNKNOWN_ERROR = 'Ocorreu um erro inesperado. Tente novamente.';
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** ResponseErrorJson da API. */
+type ErrorBody = {
+  errorMessages?: string[];
+};
+
+type QueryParams = Record<string, string | number>;
+
+function getBaseUrl(): string {
+  const url = process.env.EXPO_PUBLIC_API_URL;
+  if (!url) {
+    throw new ApiError('URL da API não configurada (EXPO_PUBLIC_API_URL).');
+  }
+  return url.replace(/\/+$/, '');
+}
+
+async function request(
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+  path: string,
+  options: { body?: unknown; token?: string; params?: QueryParams } = {},
+): Promise<Response> {
+  const query = options.params
+    ? `?${new URLSearchParams(
+        Object.entries(options.params).map(([key, value]) => [key, String(value)]),
+      )}`
+    : '';
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    // A API usa este cabeçalho para escolher o idioma das mensagens de erro.
+    'Accept-Language': 'pt-BR',
+  };
+  if (options.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (options.token) headers.Authorization = `Bearer ${options.token}`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${getBaseUrl()}${path}${query}`, {
+      method,
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError('Não foi possível conectar ao servidor. Verifique sua conexão.');
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as ErrorBody | null;
+    // A validação da API pode devolver várias mensagens (ex.: cadastro); mostra todas.
+    const messages = data?.errorMessages?.filter(Boolean) ?? [];
+    throw new ApiError(messages.length ? messages.join('\n') : UNKNOWN_ERROR, response.status);
+  }
+
+  return response;
+}
+
+/** Corpo JSON da resposta, ou `null` quando não há conteúdo (204, ou 201 sem corpo). */
+async function readJson<T>(response: Response): Promise<T | null> {
+  const text = await response.text();
+  return text ? (JSON.parse(text) as T) : null;
+}
+
+/** POST; com `token`, a requisição é autenticada (Bearer). Sem corpo na resposta → `null`. */
+export async function apiPost<TResponse>(
+  path: string,
+  body: unknown,
+  token?: string,
+): Promise<TResponse | null> {
+  return readJson<TResponse>(await request('POST', path, { body, token }));
+}
+
+/** GET autenticado. Devolve `null` quando a API responde 204 (sem conteúdo). */
+export async function apiGet<TResponse>(
+  path: string,
+  token: string,
+  params?: QueryParams,
+): Promise<TResponse | null> {
+  return readJson<TResponse>(await request('GET', path, { token, params }));
+}
+
+/** PUT autenticado (a API responde 204, sem corpo). */
+export async function apiPut(path: string, body: unknown, token: string): Promise<void> {
+  await request('PUT', path, { body, token });
+}
+
+/** DELETE autenticado (a API responde 204, sem corpo). */
+export async function apiDelete(path: string, token: string): Promise<void> {
+  await request('DELETE', path, { token });
+}
