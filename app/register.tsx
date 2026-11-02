@@ -77,7 +77,11 @@ export default function RegisterScreen() {
       // O cadastro já autentica: limpa a pilha (Login/Cadastro) e abre a tela inicial.
       router.dismissAll();
       router.replace('/home');
-      Alert.alert('Conta criada', `Bem-vindo ao MiCash, ${session.name}!`);
+      // O e-mail de boas-vindas é enviado pela API depois do cadastro (o app não envia e-mails).
+      Alert.alert(
+        'Conta criada',
+        `Bem-vindo ao MiCash, ${session.name}! Enviamos um e-mail de boas-vindas para ${values.email.trim()}.`,
+      );
     } catch (error) {
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',

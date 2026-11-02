@@ -1,10 +1,13 @@
 import {
   centsToAmount,
+  formatCountdown,
   formatCurrency,
   formatDate,
   formatPercent,
   formatRelativeDate,
+  formatTime,
   localDateKey,
+  maskEmail,
   parseCentsInput,
   toDateKey,
   toExpenseDateTime,
@@ -105,5 +108,42 @@ describe('formatPercent', () => {
     [3.04, '3%'],
   ])('%p vira %p', (value, expected) => {
     expect(formatPercent(value)).toBe(expected);
+  });
+});
+
+describe('maskEmail', () => {
+  it('mostra o início do usuário e o domínio inteiro', () => {
+    expect(maskEmail('nilton@gmail.com')).toBe('ni***@gmail.com');
+    expect(maskEmail('  ana.souza@micash.com.br ')).toBe('an***@micash.com.br');
+  });
+
+  it('em usuários curtos, mostra só a primeira letra', () => {
+    expect(maskEmail('ana@b.com')).toBe('a***@b.com');
+    expect(maskEmail('a@b.com')).toBe('a***@b.com');
+  });
+
+  it('sem @ válido, devolve o texto como está', () => {
+    expect(maskEmail('sem-arroba')).toBe('sem-arroba');
+    expect(maskEmail('@b.com')).toBe('@b.com');
+  });
+});
+
+describe('formatCountdown', () => {
+  it('formata minutos e segundos, arredondando para cima', () => {
+    expect(formatCountdown(60)).toBe('1:00');
+    expect(formatCountdown(59)).toBe('0:59');
+    expect(formatCountdown(4.2)).toBe('0:05');
+    expect(formatCountdown(-3)).toBe('0:00');
+  });
+});
+
+describe('formatTime', () => {
+  it('mostra hora e minuto no fuso do aparelho', () => {
+    const value = new Date(2026, 10, 2, 9, 5).toISOString();
+    expect(formatTime(value)).toBe('09:05');
+  });
+
+  it('valor inválido vira texto vazio', () => {
+    expect(formatTime('ontem')).toBe('');
   });
 });

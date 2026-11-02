@@ -81,3 +81,29 @@ const percentFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits:
 export function formatPercent(value: number): string {
   return `${percentFormatter.format(value)}%`;
 }
+
+/**
+ * E-mail mascarado para confirmar o destino sem expô-lo inteiro: "nilton@gmail.com" →
+ * "ni***@gmail.com". Partes curtas mostram só a primeira letra ("a@b.com" → "a***@b.com").
+ */
+export function maskEmail(email: string): string {
+  const value = email.trim();
+  const at = value.lastIndexOf('@');
+  if (at <= 0) return value;
+  const local = value.slice(0, at);
+  const visible = local.length > 3 ? local.slice(0, 2) : local.slice(0, 1);
+  return `${visible}***${value.slice(at)}`;
+}
+
+/** Segundos → "0:59" (contagem do reenvio de código). */
+export function formatCountdown(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.ceil(totalSeconds));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
+/** DateTime com fuso → "14:30" no horário do aparelho. */
+export function formatTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}

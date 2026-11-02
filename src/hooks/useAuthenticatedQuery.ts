@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { ApiError } from '@/lib/api';
-import { clearSession, getSession } from '@/lib/auth';
+import { SessionUnavailableError, clearSession, getSession, withSession } from '@/lib/auth';
 
 type LoadResult<T> =
   | { kind: 'ok'; firstName: string; data: T }
@@ -17,9 +17,12 @@ async function runQuery<T>(fetcher: (token: string) => Promise<T>): Promise<Load
 
   const firstName = session.name.trim().split(/\s+/)[0] ?? '';
   try {
-    return { kind: 'ok', firstName, data: await fetcher(session.token) };
+    // No 401, `withSession` renova a sessão (POST /refresh) e repete a consulta uma vez.
+    return { kind: 'ok', firstName, data: await withSession((token) => fetcher(token)) };
   } catch (err) {
-    if (err instanceof ApiError && err.status === 401) return { kind: 'expired' };
+    if (err instanceof SessionUnavailableError) {
+      return err.reason === 'expired' ? { kind: 'expired' } : { kind: 'no-session' };
+    }
     // Falha de rede tem mensagem própria; outros erros da API ficam com uma mensagem genérica.
     const message =
       err instanceof ApiError && err.status === undefined
@@ -31,7 +34,8 @@ async function runQuery<T>(fetcher: (token: string) => Promise<T>): Promise<Load
 
 /**
  * Carrega dados da API com o token da sessão salva. Trata carregamento, atualização,
- * erro e sessão expirada (401 → apaga a sessão e volta ao Login; ainda não há refresh token).
+ * erro e sessão expirada (401 → renova a sessão com o refresh token e repete; se a renovação for
+ * recusada, apaga a sessão e volta ao Login).
  * `fetcher` deve ser uma referência estável (ex.: função declarada fora do componente).
  */
 export function useAuthenticatedQuery<T>(fetcher: (token: string) => Promise<T>) {

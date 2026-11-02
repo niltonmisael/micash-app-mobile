@@ -26,7 +26,7 @@ import { ApiError } from '@/lib/api';
 import { login } from '@/lib/auth';
 import { isValidEmail } from '@/utils/validation';
 
-// Recuperação de senha e login social ainda não existem; o aviso deixa isso explícito.
+// Login social ainda não existe; o aviso deixa isso explícito.
 function showComingSoon(feature: string) {
   Alert.alert('Em breve', `${feature} estará disponível em uma próxima versão.`);
 }
@@ -119,7 +119,7 @@ export default function LoginScreen() {
 
           <Pressable
             style={styles.forgotPassword}
-            onPress={() => showComingSoon('A recuperação de senha')}
+            onPress={() => router.push('/forgot-password')}
             hitSlop={8}
             accessibilityRole="link"
           >

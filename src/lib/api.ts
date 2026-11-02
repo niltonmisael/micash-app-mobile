@@ -110,7 +110,7 @@ export async function apiPut(path: string, body: unknown, token: string): Promis
   await request('PUT', path, { body, token });
 }
 
-/** DELETE autenticado (a API responde 204, sem corpo). */
-export async function apiDelete(path: string, token: string): Promise<void> {
-  await request('DELETE', path, { token });
+/** DELETE autenticado (a API responde 204, sem corpo). Algumas rotas recebem um corpo JSON. */
+export async function apiDelete(path: string, token: string, body?: unknown): Promise<void> {
+  await request('DELETE', path, { token, body });
 }

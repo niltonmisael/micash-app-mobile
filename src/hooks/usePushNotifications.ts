@@ -1,21 +1,28 @@
-import * as Notifications from 'expo-notifications';
+import type { Notification, NotificationResponse } from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import type { Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
 
-import { notificationRoute, registerForPushNotifications } from '@/lib/notifications';
+import { withSession } from '@/lib/auth';
+import { markNotificationAsRead, notificationIdFromData } from '@/lib/notificationCenter';
+import {
+  getNotificationsModule,
+  notificationRoute,
+  registerForPushNotifications,
+  registerPushDevice,
+} from '@/lib/notifications';
 import type { PushRegistration } from '@/lib/notifications';
 
 type UsePushNotificationsOptions = {
   /** Notificação recebida com o app aberto (o banner já é exibido pelo handler). */
-  onReceived?: (notification: Notifications.Notification) => void;
+  onReceived?: (notification: Notification) => void;
 };
 
 /**
- * Notificações da área autenticada: pede a permissão uma única vez, obtém o Expo Push Token e
- * escuta as notificações. Tocar em uma notificação abre a rota de `data.url`, inclusive quando
- * o app foi aberto por ela (estava fechado ou no Login e chega aqui depois).
+ * Notificações da área autenticada: pede a permissão uma única vez, obtém o Expo Push Token,
+ * registra o aparelho na API (POST /api/device/push-token) e escuta as notificações. Tocar em
+ * uma notificação a marca como lida na central e abre a rota de `data.url`, inclusive quando o
+ * app foi aberto por ela (estava fechado ou no Login e chega aqui depois).
  */
 export function usePushNotifications({ onReceived }: UsePushNotificationsOptions = {}) {
   const router = useRouter();
@@ -30,9 +37,15 @@ export function usePushNotifications({ onReceived }: UsePushNotificationsOptions
 
   useEffect(() => {
     let active = true;
-    // O envio do token à API entra aqui quando o endpoint existir no backend.
-    registerForPushNotifications().then((result) => {
+    registerForPushNotifications().then(async (result) => {
       if (active) setRegistration(result);
+      if (result.status !== 'granted') return;
+      try {
+        await withSession((token) => registerPushDevice(token, result.token));
+      } catch {
+        // Sem conexão ou sessão recusada: tenta de novo na próxima entrada na área autenticada
+        // (a sessão recusada é tratada pelas telas, que voltam ao Login).
+      }
     });
     return () => {
       active = false;
@@ -40,17 +53,28 @@ export function usePushNotifications({ onReceived }: UsePushNotificationsOptions
   }, []);
 
   useEffect(() => {
-    if (Platform.OS === 'web') return;
+    // Web e Expo Go: sem o módulo nativo, não há notificações para escutar.
+    const Notifications = getNotificationsModule();
+    if (!Notifications) return;
 
-    function openResponse(response: Notifications.NotificationResponse) {
+    const openResponse = (response: NotificationResponse) => {
       const id = response.notification.request.identifier;
       if (handledResponse.current === id) return;
       handledResponse.current = id;
       Notifications.clearLastNotificationResponse();
 
-      const route = notificationRoute(response.notification.request.content.data);
+      const data = response.notification.request.content.data;
+      // Tocar conta como leitura na central (sem esperar a API: a navegação não depende dela).
+      const notificationId = notificationIdFromData(data);
+      if (notificationId !== undefined) {
+        withSession((token) => markNotificationAsRead(token, notificationId)).catch(
+          () => undefined,
+        );
+      }
+
+      const route = notificationRoute(data);
       if (route) router.push(route as Href);
-    }
+    };
 
     const pending = Notifications.getLastNotificationResponse();
     if (pending) openResponse(pending);

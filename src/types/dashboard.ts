@@ -9,6 +9,27 @@ export type MonthlySummary = {
   month: number;
 };
 
+/** ResponseDailySummaryItemJson — valores de um dia; os acumulados já vêm calculados pela API. */
+export type DailySummaryDay = {
+  day: number;
+  income: number;
+  expense: number;
+  /** Do dia 1 até este dia; no último dia, igual ao `totalIncome` do monthly-summary. */
+  cumulativeIncome: number;
+  /** Do dia 1 até este dia; no último dia, igual ao `totalExpense` do monthly-summary. */
+  cumulativeExpense: number;
+};
+
+/**
+ * ResponseDailySummaryJson — GET /api/dashboard/daily-summary?year&month. Todos os dias do mês
+ * (28 a 31), inclusive os sem lançamento (0); mesmos lançamentos e regra de mês do monthly-summary.
+ */
+export type DailySummary = {
+  year: number;
+  month: number;
+  days: DailySummaryDay[];
+};
+
 /** ResponseLatestExpenseJson (`expenseDate` é um DateTime). */
 export type LatestExpense = {
   id: number;

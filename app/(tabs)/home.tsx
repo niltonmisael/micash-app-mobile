@@ -4,17 +4,20 @@ import IconEyeOff from '@tabler/icons-react-native/IconEyeOff';
 import IconSparkles from '@tabler/icons-react-native/IconSparkles';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { GoalLimitRow } from '@/components/GoalLimitRow';
+import { LineChart } from '@/components/LineChart';
 import { Skeleton, TransactionRowSkeleton } from '@/components/Skeleton';
 import { TransactionRow } from '@/components/TransactionRow';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
-import { getDashboard } from '@/lib/dashboard';
+import { useUnreadNotificationsCount } from '@/hooks/useUnreadNotificationsCount';
+import { chartDays, getDashboard } from '@/lib/dashboard';
+import type { DailySummaryDay } from '@/types/dashboard';
 import { getSettings } from '@/lib/settings';
 import { formatCurrency } from '@/utils/format';
 
@@ -24,6 +27,7 @@ export default function DashboardScreen() {
   const router = useRouter();
   const { data, firstName, loading, refreshing, error, refresh, retry } =
     useAuthenticatedQuery(getDashboard);
+  const unreadNotifications = useUnreadNotificationsCount();
   const [balanceHidden, setBalanceHidden] = useState(false);
 
   // "Exibir saldo na tela inicial" (Configurações) define se o saldo abre visível ou oculto.
@@ -41,6 +45,7 @@ export default function DashboardScreen() {
 
   const summary = data?.summary;
   const goals = data?.goals;
+  const daily = data?.daily;
   const showSkeleton = loading && !data;
 
   return (
@@ -72,16 +77,22 @@ export default function DashboardScreen() {
             </Pressable>
             <Pressable
               style={styles.headerButton}
-              onPress={() =>
-                Alert.alert(
-                  'Em breve',
-                  'As notificações estarão disponíveis em uma próxima versão.',
-                )
-              }
+              onPress={() => router.push('/notification-center')}
               accessibilityRole="button"
-              accessibilityLabel="Notificações"
+              accessibilityLabel={
+                unreadNotifications
+                  ? `Notificações: ${unreadNotifications} não ${unreadNotifications === 1 ? 'lida' : 'lidas'}`
+                  : 'Notificações'
+              }
             >
               <IconBell size={22} color={colors.primary} />
+              {!!unreadNotifications && (
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>
+                    {unreadNotifications > 9 ? '9+' : unreadNotifications}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           </View>
         </View>
@@ -140,10 +151,15 @@ export default function DashboardScreen() {
 
         <Text style={styles.sectionTitle}>Resumo do mês</Text>
         <View style={styles.chartCard}>
-          {/* A API ainda não tem valores por dia; o gráfico de linhas aguarda esse endpoint. */}
-          <View style={styles.chartEmpty}>
-            <Text style={styles.chartEmptyText}>O gráfico diário estará disponível em breve.</Text>
-          </View>
+          {showSkeleton ? (
+            <Skeleton width={260} height={90} />
+          ) : daily && daily.length > 0 ? (
+            <DailyChart days={daily} />
+          ) : (
+            <View style={styles.chartEmpty}>
+              <Text style={styles.chartEmptyText}>Gráfico indisponível no momento.</Text>
+            </View>
+          )}
           <View style={styles.legend}>
             <LegendItem color={colors.income} label="Receitas" />
             <LegendItem color={colors.primary} label="Despesas" />
@@ -232,6 +248,33 @@ function LegendItem({ color, label }: { color: string; label: string }) {
   );
 }
 
+/** Dias marcados no eixo, como no protótipo (só os que existem no mês). */
+const CHART_LABEL_DAYS = [1, 8, 15, 22, 29];
+
+/** Receitas e despesas acumuladas no mês (valores da API), até hoje. */
+function DailyChart({ days }: { days: DailySummaryDay[] }) {
+  const visible = chartDays(days);
+  const last = visible[visible.length - 1];
+  const accessibilityLabel = last
+    ? `Resumo do mês até o dia ${last.day}: receitas ${formatCurrency(last.cumulativeIncome)}, despesas ${formatCurrency(last.cumulativeExpense)}`
+    : 'Resumo do mês sem lançamentos';
+
+  return (
+    <LineChart
+      length={days.length}
+      series={[
+        { values: visible.map((item) => item.cumulativeIncome), color: colors.income },
+        { values: visible.map((item) => item.cumulativeExpense), color: colors.primary },
+      ]}
+      xLabels={CHART_LABEL_DAYS.filter((day) => day <= days.length).map((day) => ({
+        index: day - 1,
+        label: String(day),
+      }))}
+      accessibilityLabel={accessibilityLabel}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -266,6 +309,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    minWidth: 16,
+    height: 16,
+    paddingHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: colors.expense,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: {
+    fontFamily: fonts.semiBold,
+    fontSize: 10,
+    color: colors.white,
   },
   assistantButton: {
     backgroundColor: colors.beige,

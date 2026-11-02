@@ -8,18 +8,21 @@ export function isValidEmail(value: string): boolean {
 export const PASSWORD_REQUIREMENTS =
   'A senha deve ter no mínimo 8 caracteres, com letra maiúscula, letra minúscula, número e um destes caracteres: ! ? * .';
 
+/** Regras do PasswordValidator da MiCash.API, na ordem em que aparecem para o usuário. */
+export const PASSWORD_RULES: { label: string; test: (value: string) => boolean }[] = [
+  { label: 'Mínimo de 8 caracteres', test: (value) => value.length >= 8 },
+  { label: 'Uma letra maiúscula', test: (value) => /[A-Z]/.test(value) },
+  { label: 'Uma letra minúscula', test: (value) => /[a-z]/.test(value) },
+  { label: 'Um número', test: (value) => /[0-9]/.test(value) },
+  { label: 'Um destes caracteres: ! ? * .', test: (value) => /[!?*.]/.test(value) },
+];
+
 /**
  * Espelha o PasswordValidator da MiCash.API: mínimo de 8 caracteres, com maiúscula,
  * minúscula, número e um dos caracteres especiais aceitos pela API (! ? * .).
  */
 export function isValidPassword(value: string): boolean {
-  return (
-    value.length >= 8 &&
-    /[A-Z]/.test(value) &&
-    /[a-z]/.test(value) &&
-    /[0-9]/.test(value) &&
-    /[!?*.]/.test(value)
-  );
+  return PASSWORD_RULES.every((rule) => rule.test(value));
 }
 
 export type RegisterFormValues = {
@@ -193,7 +196,14 @@ export type ChangePasswordFormValues = {
 
 export type ChangePasswordFormErrors = Partial<Record<keyof ChangePasswordFormValues, string>>;
 
-/** A senha atual é conferida pela API; a nova segue o mesmo PasswordValidator do cadastro. */
+/** Mesmo texto da API (NEW_PASSWORD_SAME_AS_CURRENT). */
+export const NEW_PASSWORD_SAME_AS_CURRENT = 'A nova senha deve ser diferente da senha atual.';
+
+/**
+ * A senha atual é conferida pela API; a nova segue o mesmo PasswordValidator do cadastro e,
+ * como no ChangePasswordUseCase, não pode ser idêntica à atual (texto exato, sem trim). O aviso
+ * de formato tem prioridade sobre o de senha repetida.
+ */
 export function validateChangePasswordForm(
   values: ChangePasswordFormValues,
 ): ChangePasswordFormErrors {
@@ -201,6 +211,8 @@ export function validateChangePasswordForm(
   if (!values.currentPassword) errors.currentPassword = 'Informe a senha atual.';
   if (!values.newPassword) errors.newPassword = 'Informe a nova senha.';
   else if (!isValidPassword(values.newPassword)) errors.newPassword = PASSWORD_REQUIREMENTS;
+  else if (values.newPassword === values.currentPassword)
+    errors.newPassword = NEW_PASSWORD_SAME_AS_CURRENT;
   if (!values.confirmPassword) errors.confirmPassword = 'Confirme a nova senha.';
   else if (values.confirmPassword !== values.newPassword)
     errors.confirmPassword = 'As senhas não coincidem.';
@@ -214,13 +226,32 @@ export type PasswordStrength = 'fraca' | 'média' | 'forte';
  * (8+ caracteres, maiúscula, minúscula, número, especial). "forte" = aceita pela API.
  */
 export function passwordStrength(value: string): { level: PasswordStrength; score: number } {
-  const score = [
-    value.length >= 8,
-    /[A-Z]/.test(value),
-    /[a-z]/.test(value),
-    /[0-9]/.test(value),
-    /[!?*.]/.test(value),
-  ].filter(Boolean).length;
+  const score = PASSWORD_RULES.filter((rule) => rule.test(value)).length;
   const level: PasswordStrength = score === 5 ? 'forte' : score >= 3 ? 'média' : 'fraca';
   return { level, score };
+}
+
+export type ResetPasswordFormValues = {
+  newPassword: string;
+  confirmPassword: string;
+};
+
+export type ResetPasswordFormErrors = Partial<Record<keyof ResetPasswordFormValues, string>>;
+
+/** Nova senha da recuperação: o mesmo PasswordValidator do cadastro, mais a confirmação. */
+export function validateResetPasswordForm(
+  values: ResetPasswordFormValues,
+): ResetPasswordFormErrors {
+  const errors: ResetPasswordFormErrors = {};
+  if (!values.newPassword) errors.newPassword = 'Informe a nova senha.';
+  else if (!isValidPassword(values.newPassword)) errors.newPassword = PASSWORD_REQUIREMENTS;
+  if (!values.confirmPassword) errors.confirmPassword = 'Confirme a nova senha.';
+  else if (values.confirmPassword !== values.newPassword)
+    errors.confirmPassword = 'As senhas não coincidem.';
+  return errors;
+}
+
+/** Código da recuperação: só dígitos, com o tamanho informado pela API (PasswordResetRules). */
+export function isValidResetCode(code: string, length: number): boolean {
+  return code.length === length && /^\d+$/.test(code);
 }

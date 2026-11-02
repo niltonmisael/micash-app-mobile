@@ -1,12 +1,16 @@
 import {
+  NEW_PASSWORD_SAME_AS_CURRENT,
   PASSWORD_REQUIREMENTS,
+  PASSWORD_RULES,
   isValidEmail,
   isValidPassword,
+  isValidResetCode,
   passwordStrength,
   validateCategoryForm,
   validateChangePasswordForm,
   validateProfileForm,
   validateRegisterForm,
+  validateResetPasswordForm,
   validateSavingsGoalForm,
   validateSavingsMovementForm,
   validateTransactionForm,
@@ -188,6 +192,36 @@ describe('validateChangePasswordForm', () => {
       confirmPassword: 'As senhas não coincidem.',
     });
   });
+
+  it('recusa a nova senha idêntica à atual, como a API', () => {
+    expect(
+      validateChangePasswordForm({
+        currentPassword: 'Atual123!',
+        newPassword: 'Atual123!',
+        confirmPassword: 'Atual123!',
+      }),
+    ).toEqual({ newPassword: NEW_PASSWORD_SAME_AS_CURRENT });
+  });
+
+  it('compara o texto exato (maiúsculas e espaços contam)', () => {
+    const base = { currentPassword: 'Atual123!', confirmPassword: '' };
+    expect(
+      validateChangePasswordForm({ ...base, newPassword: 'atual123!A' }).newPassword,
+    ).toBeUndefined();
+    expect(
+      validateChangePasswordForm({ ...base, newPassword: 'Atual123! ' }).newPassword,
+    ).toBeUndefined();
+  });
+
+  it('o aviso de formato tem prioridade sobre o de senha repetida', () => {
+    expect(
+      validateChangePasswordForm({
+        currentPassword: 'fraca',
+        newPassword: 'fraca',
+        confirmPassword: 'fraca',
+      }).newPassword,
+    ).toBe(PASSWORD_REQUIREMENTS);
+  });
 });
 
 describe('passwordStrength', () => {
@@ -245,5 +279,49 @@ describe('validateSavingsMovementForm', () => {
     expect(
       validateSavingsMovementForm({ amountCents: 30000, date: today, maxCents: 30000 }, today),
     ).toEqual({});
+  });
+});
+
+describe('PASSWORD_RULES', () => {
+  it('são as 5 regras do PasswordValidator, avaliadas uma a uma', () => {
+    expect(PASSWORD_RULES.map((rule) => rule.test('abc'))).toEqual([
+      false,
+      false,
+      true,
+      false,
+      false,
+    ]);
+    expect(PASSWORD_RULES.every((rule) => rule.test('Abcdef1!'))).toBe(true);
+  });
+});
+
+describe('validateResetPasswordForm', () => {
+  it('aceita senha válida confirmada', () => {
+    expect(
+      validateResetPasswordForm({ newPassword: 'Abcdef1!', confirmPassword: 'Abcdef1!' }),
+    ).toEqual({});
+  });
+
+  it('exige as regras da API e a confirmação igual', () => {
+    expect(validateResetPasswordForm({ newPassword: '', confirmPassword: '' })).toEqual({
+      newPassword: 'Informe a nova senha.',
+      confirmPassword: 'Confirme a nova senha.',
+    });
+    expect(
+      validateResetPasswordForm({ newPassword: 'abcdefgh', confirmPassword: 'abcdefgh' })
+        .newPassword,
+    ).toBe(PASSWORD_REQUIREMENTS);
+    expect(
+      validateResetPasswordForm({ newPassword: 'Abcdef1!', confirmPassword: 'Abcdef1?' }),
+    ).toEqual({ confirmPassword: 'As senhas não coincidem.' });
+  });
+});
+
+describe('isValidResetCode', () => {
+  it('aceita só dígitos no tamanho informado pela API', () => {
+    expect(isValidResetCode('004213', 6)).toBe(true);
+    expect(isValidResetCode('00421', 6)).toBe(false);
+    expect(isValidResetCode('00421a', 6)).toBe(false);
+    expect(isValidResetCode('0042133', 6)).toBe(false);
   });
 });
