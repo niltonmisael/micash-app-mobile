@@ -7,6 +7,8 @@ import {
   validateChangePasswordForm,
   validateProfileForm,
   validateRegisterForm,
+  validateSavingsGoalForm,
+  validateSavingsMovementForm,
   validateTransactionForm,
 } from './validation';
 
@@ -197,5 +199,51 @@ describe('passwordStrength', () => {
     ['Abcdef1!', 'forte', 5],
   ])('%p é %p', (value, level, score) => {
     expect(passwordStrength(value)).toEqual({ level, score });
+  });
+});
+
+describe('validateSavingsGoalForm', () => {
+  const valid = { name: 'Viagem', targetCents: 500000, icon: 'plane', color: '#F58A3C' };
+
+  it('aceita uma meta completa', () => {
+    expect(validateSavingsGoalForm(valid)).toEqual({});
+  });
+
+  it('exige nome (até 100 caracteres), valor alvo, ícone e cor', () => {
+    expect(
+      validateSavingsGoalForm({ name: '  ', targetCents: 0, icon: undefined, color: undefined }),
+    ).toEqual({
+      name: 'Informe o nome da meta.',
+      target: 'Informe um valor maior que zero.',
+      icon: 'Escolha um ícone.',
+      color: 'Escolha uma cor.',
+    });
+    expect(validateSavingsGoalForm({ ...valid, name: 'a'.repeat(101) }).name).toBe(
+      'O nome deve ter no máximo 100 caracteres.',
+    );
+  });
+});
+
+describe('validateSavingsMovementForm', () => {
+  const today = '2026-10-21';
+
+  it('aceita valor positivo com data até hoje', () => {
+    expect(validateSavingsMovementForm({ amountCents: 30000, date: today }, today)).toEqual({});
+  });
+
+  it('recusa valor zero e data futura', () => {
+    expect(validateSavingsMovementForm({ amountCents: 0, date: '2026-10-22' }, today)).toEqual({
+      amount: 'Informe um valor maior que zero.',
+      date: 'A data não pode ser futura.',
+    });
+  });
+
+  it('na retirada, recusa valor maior que o guardado', () => {
+    expect(
+      validateSavingsMovementForm({ amountCents: 30001, date: today, maxCents: 30000 }, today),
+    ).toEqual({ amount: 'O valor é maior que o guardado na meta.' });
+    expect(
+      validateSavingsMovementForm({ amountCents: 30000, date: today, maxCents: 30000 }, today),
+    ).toEqual({});
   });
 });

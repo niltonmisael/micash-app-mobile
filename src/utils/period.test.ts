@@ -1,10 +1,13 @@
 import {
   currentPeriod,
   lastPeriods,
+  periodEndKey,
+  periodFromDateKey,
   periodLabel,
   samePeriod,
   shiftPeriod,
   shortMonthLabel,
+  shortMonthYearLabel,
 } from './period';
 
 describe('currentPeriod', () => {
@@ -53,5 +56,22 @@ describe('periodLabel / shortMonthLabel', () => {
   it('compara períodos', () => {
     expect(samePeriod({ year: 2026, month: 10 }, { year: 2026, month: 10 })).toBe(true);
     expect(samePeriod({ year: 2026, month: 10 }, { year: 2025, month: 10 })).toBe(false);
+  });
+});
+
+describe('prazo das metas de economia', () => {
+  it('mostra o mês abreviado com o ano', () => {
+    expect(shortMonthYearLabel({ year: 2026, month: 12 })).toBe('dez/2026');
+    expect(shortMonthYearLabel({ year: 2027, month: 3 })).toBe('mar/2027');
+  });
+
+  it('envia o último dia do mês, inclusive em fevereiro bissexto', () => {
+    expect(periodEndKey({ year: 2026, month: 12 })).toBe('2026-12-31');
+    expect(periodEndKey({ year: 2026, month: 4 })).toBe('2026-04-30');
+    expect(periodEndKey({ year: 2028, month: 2 })).toBe('2028-02-29');
+  });
+
+  it('lê o mês de uma data da API', () => {
+    expect(periodFromDateKey('2026-12-31')).toEqual({ year: 2026, month: 12 });
   });
 });

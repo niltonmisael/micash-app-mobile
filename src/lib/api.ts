@@ -19,6 +19,11 @@ type ErrorBody = {
 
 type QueryParams = Record<string, string | number>;
 
+/** Opções por requisição. Chamadas que passam pela IA (Gemini) precisam de um tempo maior. */
+export type RequestOptions = {
+  timeoutMs?: number;
+};
+
 function getBaseUrl(): string {
   const url = process.env.EXPO_PUBLIC_API_URL;
   if (!url) {
@@ -30,7 +35,7 @@ function getBaseUrl(): string {
 async function request(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE',
   path: string,
-  options: { body?: unknown; token?: string; params?: QueryParams } = {},
+  options: { body?: unknown; token?: string; params?: QueryParams; timeoutMs?: number } = {},
 ): Promise<Response> {
   const query = options.params
     ? `?${new URLSearchParams(
@@ -47,7 +52,7 @@ async function request(
   if (options.token) headers.Authorization = `Bearer ${options.token}`;
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
 
   let response: Response;
   try {
@@ -85,8 +90,9 @@ export async function apiPost<TResponse>(
   path: string,
   body: unknown,
   token?: string,
+  options?: RequestOptions,
 ): Promise<TResponse | null> {
-  return readJson<TResponse>(await request('POST', path, { body, token }));
+  return readJson<TResponse>(await request('POST', path, { body, token, ...options }));
 }
 
 /** GET autenticado. Devolve `null` quando a API responde 204 (sem conteúdo). */
@@ -94,8 +100,9 @@ export async function apiGet<TResponse>(
   path: string,
   token: string,
   params?: QueryParams,
+  options?: RequestOptions,
 ): Promise<TResponse | null> {
-  return readJson<TResponse>(await request('GET', path, { token, params }));
+  return readJson<TResponse>(await request('GET', path, { token, params, ...options }));
 }
 
 /** PUT autenticado (a API responde 204, sem corpo). */

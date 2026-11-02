@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "408812427567",
+    "project_id": "micash-e0055",
+    "storage_bucket": "micash-e0055.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:408812427567:android:6c1b717c3283a51baf29da",
+        "android_client_info": {
+          "package_name": "br.com.micash.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCi54AGaBz1C6KvF1078EtgP18CgPsLtpM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

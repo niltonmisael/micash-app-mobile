@@ -28,7 +28,15 @@ Telas implementadas: Splash (`app/index.tsx`), Login (`app/login.tsx`), Cadastro
 - Aba `app/(tabs)/profile.tsx`: nome e e-mail (`GET /api/user/profile`), plano atual (`GET /api/subscription/current`; sem assinatura vem `planId: null` = Gratuito) e menu. "Preferências" e "Ajuda e suporte" mostram "Em breve" (nada definido no backend nem no app).
 - `app/personal-data.tsx`: `PUT /api/user/update` com `name` e `email` (a API não tem telefone nem verificação de troca de e-mail); o nome também é atualizado na sessão salva.
 - `app/change-password.tsx`: `PUT /api/user/change-password` com `password` e `newPassword` (a confirmação não é enviada). A API confere a senha atual e não encerra outras sessões.
-- `app/notifications.tsx`: opções desligadas e bloqueadas — não há notificações no app nem preferências na API.
+- `app/notifications.tsx`: opções desligadas e bloqueadas — a API ainda não guarda preferências nem envia notificações.
+
+## Notificações push
+
+- Fluxo: app (`expo-notifications`) → Expo Push Token → API .NET (a definir) → Expo Push Service (`https://exp.host/--/api/v2/push/send`), que entrega pelo FCM V1 (Android) e APNs (iOS). O app não usa o Firebase diretamente; o `google-services.json` é a configuração pública do Android (`expo.android.googleServicesFile`).
+- `src/lib/notifications.ts`: exibição com o app aberto (banner), canal Android `default`, permissão (o diálogo só aparece enquanto o usuário não respondeu; negada não é pedida de novo) e `registerForPushNotifications()`, que devolve o token ou o motivo (`denied`, `unsupported` em web/simulador/Expo Go, `error`). O token usa o `extra.eas.projectId`.
+- `src/hooks/usePushNotifications.ts`, montado em `app/(tabs)/_layout.tsx` (área autenticada): registra o aparelho uma vez e escuta as notificações. Ao tocar, abre a rota interna de `data.url` (ex.: `"/goals"`); outros valores são ignorados.
+- Ainda não há endpoint para enviar o token à API; o hook só o disponibiliza.
+- Push remoto exige development build em aparelho físico (`eas build --profile development`); o Expo Go não recebe. A chave da Service Account do Firebase (FCM V1) fica só nas credenciais do EAS e é ignorada pelo Git.
 - `app/subscription.tsx`: planos de `GET /api/plan` (só nome e preço; sem benefícios, limites ou plano anual). "Assinar" chama `POST /api/checkout` e abre o link do Pagar.me; a assinatura só muda quando o backend confirma o pagamento.
 - `app/settings.tsx`: moeda (Real), tema (Claro) e dia de início do mês (1) são informativos. "Exibir saldo na tela inicial" e "Biometria" ficam salvos no aparelho (`src/lib/settings.ts`). "Confirmar exclusão de transações" está bloqueado (o app não exclui transações).
 - Sair: `POST /logout` revoga o refresh token e a sessão local é apagada. O access token (JWT) continua válido até expirar, pois a API não tem lista de revogação.

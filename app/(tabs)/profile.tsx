@@ -4,8 +4,10 @@ import IconHelpCircle from '@tabler/icons-react-native/IconHelpCircle';
 import IconLock from '@tabler/icons-react-native/IconLock';
 import IconLogout from '@tabler/icons-react-native/IconLogout';
 import IconSettings from '@tabler/icons-react-native/IconSettings';
+import IconSparkles from '@tabler/icons-react-native/IconSparkles';
 import IconStar from '@tabler/icons-react-native/IconStar';
 import IconTag from '@tabler/icons-react-native/IconTag';
+import IconTarget from '@tabler/icons-react-native/IconTarget';
 import IconUser from '@tabler/icons-react-native/IconUser';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -113,6 +115,16 @@ export default function ProfileScreen() {
             onPress={() => router.push('/change-password')}
           />
           <MenuRow icon={IconTag} label="Categorias" onPress={() => router.push('/categories')} />
+          <MenuRow
+            icon={IconTarget}
+            label="Metas"
+            onPress={() => router.push({ pathname: '/goals', params: { tab: 'savings' } })}
+          />
+          <MenuRow
+            icon={IconSparkles}
+            label="MI Assistente"
+            onPress={() => router.push('/assistant')}
+          />
           <MenuRow
             icon={IconAdjustmentsHorizontal}
             label="Preferências"

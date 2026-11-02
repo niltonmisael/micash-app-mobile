@@ -1,14 +1,19 @@
+import IconBeach from '@tabler/icons-react-native/IconBeach';
 import IconBolt from '@tabler/icons-react-native/IconBolt';
 import IconBook from '@tabler/icons-react-native/IconBook';
 import IconBriefcase from '@tabler/icons-react-native/IconBriefcase';
 import IconCar from '@tabler/icons-react-native/IconCar';
+import IconDeviceLaptop from '@tabler/icons-react-native/IconDeviceLaptop';
 import IconDeviceTv from '@tabler/icons-react-native/IconDeviceTv';
 import IconDots from '@tabler/icons-react-native/IconDots';
 import IconGift from '@tabler/icons-react-native/IconGift';
 import IconHeart from '@tabler/icons-react-native/IconHeart';
 import IconHome from '@tabler/icons-react-native/IconHome';
 import IconPaw from '@tabler/icons-react-native/IconPaw';
+import IconPigMoney from '@tabler/icons-react-native/IconPigMoney';
 import IconPlane from '@tabler/icons-react-native/IconPlane';
+import IconSchool from '@tabler/icons-react-native/IconSchool';
+import IconShield from '@tabler/icons-react-native/IconShield';
 import IconShirt from '@tabler/icons-react-native/IconShirt';
 import IconShoppingCart from '@tabler/icons-react-native/IconShoppingCart';
 import IconTag from '@tabler/icons-react-native/IconTag';
@@ -45,6 +50,24 @@ export const CATEGORY_ICONS: Record<string, Icon> = {
 
 export const CATEGORY_ICON_KEYS = Object.keys(CATEGORY_ICONS);
 
+/** Ícones oferecidos para metas de economia (mesma convenção: o nome Tabler vai no `icon`). */
+export const SAVINGS_GOAL_ICONS: Record<string, Icon> = {
+  plane: IconPlane,
+  shield: IconShield,
+  'device-laptop': IconDeviceLaptop,
+  home: IconHome,
+  gift: IconGift,
+  car: IconCar,
+  school: IconSchool,
+  beach: IconBeach,
+  heart: IconHeart,
+  'pig-money': IconPigMoney,
+};
+
+export const SAVINGS_GOAL_ICON_KEYS = Object.keys(SAVINGS_GOAL_ICONS);
+
+const ALL_ICONS: Record<string, Icon> = { ...CATEGORY_ICONS, ...SAVINGS_GOAL_ICONS };
+
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 export function isKnownCategoryIcon(icon: string): boolean {
@@ -63,9 +86,9 @@ type CategoryIconProps = {
   size?: number;
 };
 
-/** Ícone da categoria em um quadrado com fundo suave, como nos protótipos. */
+/** Ícone da categoria (ou da meta de economia) em um quadrado com fundo suave, como nos protótipos. */
 export function CategoryIcon({ icon, color, size = 40 }: CategoryIconProps) {
-  const Component = (icon && CATEGORY_ICONS[icon]) || IconTag;
+  const Component = (icon && ALL_ICONS[icon]) || IconTag;
   const tint = categoryDisplayColor(color);
   return (
     <View

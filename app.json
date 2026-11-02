@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "br.com.micash.app"
+      "package": "br.com.micash.app",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
@@ -33,7 +34,8 @@
         {
           "faceIDPermission": "Permitir que o MiCash use o Face ID para desbloquear o app."
         }
-      ]
+      ],
+      "expo-notifications"
     ],
     "scheme": "micash",
     "extra": {

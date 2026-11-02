@@ -7,3 +7,6 @@ package-lock.json
 /ios
 /android
 assets/
+
+# Gerado pelo Firebase: mantido como foi baixado
+google-services.json

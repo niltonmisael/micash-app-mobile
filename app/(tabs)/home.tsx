@@ -1,12 +1,14 @@
 import IconBell from '@tabler/icons-react-native/IconBell';
 import IconEye from '@tabler/icons-react-native/IconEye';
 import IconEyeOff from '@tabler/icons-react-native/IconEyeOff';
+import IconSparkles from '@tabler/icons-react-native/IconSparkles';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { GoalLimitRow } from '@/components/GoalLimitRow';
 import { Skeleton, TransactionRowSkeleton } from '@/components/Skeleton';
 import { TransactionRow } from '@/components/TransactionRow';
 import { colors } from '@/constants/colors';
@@ -38,6 +40,7 @@ export default function DashboardScreen() {
   );
 
   const summary = data?.summary;
+  const goals = data?.goals;
   const showSkeleton = loading && !data;
 
   return (
@@ -58,16 +61,29 @@ export default function DashboardScreen() {
           <Text style={styles.greeting} accessibilityRole="header" numberOfLines={1}>
             {firstName ? `Olá, ${firstName} 👋` : 'Olá 👋'}
           </Text>
-          <Pressable
-            style={styles.bellButton}
-            onPress={() =>
-              Alert.alert('Em breve', 'As notificações estarão disponíveis em uma próxima versão.')
-            }
-            accessibilityRole="button"
-            accessibilityLabel="Notificações"
-          >
-            <IconBell size={22} color={colors.primary} />
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable
+              style={[styles.headerButton, styles.assistantButton]}
+              onPress={() => router.push('/assistant')}
+              accessibilityRole="button"
+              accessibilityLabel="MI Assistente"
+            >
+              <IconSparkles size={22} color={colors.primary} />
+            </Pressable>
+            <Pressable
+              style={styles.headerButton}
+              onPress={() =>
+                Alert.alert(
+                  'Em breve',
+                  'As notificações estarão disponíveis em uma próxima versão.',
+                )
+              }
+              accessibilityRole="button"
+              accessibilityLabel="Notificações"
+            >
+              <IconBell size={22} color={colors.primary} />
+            </Pressable>
+          </View>
         </View>
 
         {!!error && (
@@ -132,6 +148,44 @@ export default function DashboardScreen() {
             <LegendItem color={colors.income} label="Receitas" />
             <LegendItem color={colors.primary} label="Despesas" />
           </View>
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Metas</Text>
+          <Pressable
+            onPress={() => router.navigate({ pathname: '/goals', params: { tab: 'limits' } })}
+            hitSlop={8}
+            accessibilityRole="link"
+          >
+            <Text style={styles.seeAll}>Ver todas</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.listCard, styles.goalsCard]}>
+          {showSkeleton ? (
+            <TransactionRowSkeleton />
+          ) : goals && goals.length > 0 ? (
+            goals.map((limit, index) => (
+              <GoalLimitRow
+                key={limit.id}
+                limit={limit}
+                onPress={() => router.navigate({ pathname: '/goals', params: { tab: 'limits' } })}
+                divider={index < goals.length - 1}
+              />
+            ))
+          ) : goals ? (
+            <Pressable
+              onPress={() => router.navigate({ pathname: '/goals', params: { tab: 'limits' } })}
+              accessibilityRole="button"
+              style={styles.goalsEmpty}
+            >
+              <Text style={styles.goalsEmptyText}>
+                Defina limites de gasto por categoria e acompanhe aqui.
+              </Text>
+              <Text style={styles.seeAll}>Criar limite</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.emptyText}>Metas indisponíveis no momento.</Text>
+          )}
         </View>
 
         <View style={styles.sectionHeader}>
@@ -201,13 +255,20 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginRight: 12,
   },
-  bellButton: {
+  headerActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  headerButton: {
     width: 44,
     height: 44,
     borderRadius: 14,
     backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  assistantButton: {
+    backgroundColor: colors.beige,
   },
   balanceCard: {
     backgroundColor: colors.white,
@@ -328,6 +389,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     borderRadius: 20,
     overflow: 'hidden',
+  },
+  goalsCard: {
+    marginBottom: 22,
+  },
+  goalsEmpty: {
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 20,
+  },
+  goalsEmptyText: {
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
   emptyText: {
     fontFamily: fonts.regular,

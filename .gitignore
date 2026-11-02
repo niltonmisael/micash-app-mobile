@@ -21,6 +21,17 @@ expo-env.d.ts
 *.mobileprovision
 *.pem
 
+# Firebase Service Account (chave privada do FCM V1): vai só para as credenciais do EAS,
+# nunca para o app nem para o Git. O google-services.json é público e continua versionado.
+*firebase-adminsdk*.json
+*service-account*.json
+*service_account*.json
+*serviceAccount*.json
+
+# Credenciais locais do EAS (credentials.json e os arquivos que ele referencia)
+credentials.json
+/credentials/
+
 # Local environment (never commit secrets)
 .env
 .env.*

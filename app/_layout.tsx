@@ -5,6 +5,10 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 
 import { colors } from '@/constants/colors';
+import { configureForegroundNotifications } from '@/lib/notifications';
+
+// Antes de qualquer notificação chegar: com o app aberto, ela aparece como banner.
+configureForegroundNotifications();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

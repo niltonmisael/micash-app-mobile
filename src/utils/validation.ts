@@ -109,6 +109,71 @@ export function validateCategoryForm(values: CategoryFormValues): CategoryFormEr
   return errors;
 }
 
+export type GoalFormValues = {
+  categoryId?: number;
+  amountCents: number;
+};
+
+export type GoalFormErrors = Partial<Record<'category' | 'amount', string>>;
+
+/**
+ * Espelha o ValidatorFinancialGoal da API (categoria e valor > 0). O mês vem de uma lista que
+ * só oferece meses aceitos pela API (ano atual em diante).
+ */
+export function validateGoalForm(values: GoalFormValues): GoalFormErrors {
+  const errors: GoalFormErrors = {};
+  if (values.categoryId === undefined) errors.category = 'Selecione uma categoria.';
+  if (values.amountCents <= 0) errors.amount = 'Informe um valor maior que zero.';
+  return errors;
+}
+
+/** Limite do nome da meta de economia (SavingsGoalRules.NAME_MAX_LENGTH na API). */
+export const SAVINGS_GOAL_NAME_MAX_LENGTH = 100;
+
+export type SavingsGoalFormValues = {
+  name: string;
+  targetCents: number;
+  icon?: string;
+  color?: string;
+};
+
+export type SavingsGoalFormErrors = Partial<Record<'name' | 'target' | 'icon' | 'color', string>>;
+
+/**
+ * Espelha os validadores de meta de economia da API (nome obrigatório até 100 caracteres, valor
+ * alvo > 0, ícone e cor). O prazo vem de uma lista que só oferece meses aceitos pela API.
+ */
+export function validateSavingsGoalForm(values: SavingsGoalFormValues): SavingsGoalFormErrors {
+  const errors: SavingsGoalFormErrors = {};
+  const name = values.name.trim();
+  if (!name) errors.name = 'Informe o nome da meta.';
+  else if (name.length > SAVINGS_GOAL_NAME_MAX_LENGTH)
+    errors.name = `O nome deve ter no máximo ${SAVINGS_GOAL_NAME_MAX_LENGTH} caracteres.`;
+  if (values.targetCents <= 0) errors.target = 'Informe um valor maior que zero.';
+  if (!values.icon) errors.icon = 'Escolha um ícone.';
+  if (!values.color) errors.color = 'Escolha uma cor.';
+  return errors;
+}
+
+export type SavingsMovementFormErrors = Partial<Record<'amount' | 'date', string>>;
+
+/**
+ * Espelha o ValidatorSavingsMovement da API (valor > 0, data não futura). Na retirada, `maxCents`
+ * é o valor guardado: a API recusa retiradas maiores que ele.
+ */
+export function validateSavingsMovementForm(
+  values: { amountCents: number; date: string; maxCents?: number },
+  today: string,
+): SavingsMovementFormErrors {
+  const errors: SavingsMovementFormErrors = {};
+  if (values.amountCents <= 0) errors.amount = 'Informe um valor maior que zero.';
+  else if (values.maxCents !== undefined && values.amountCents > values.maxCents)
+    errors.amount = 'O valor é maior que o guardado na meta.';
+  if (!values.date) errors.date = 'Informe a data.';
+  else if (values.date > today) errors.date = 'A data não pode ser futura.';
+  return errors;
+}
+
 export type ProfileFormErrors = Partial<Record<'name' | 'email', string>>;
 
 /** Espelha o UpdateUserValidator da API (nome obrigatório, e-mail obrigatório e válido). */

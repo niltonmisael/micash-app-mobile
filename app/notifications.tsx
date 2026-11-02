@@ -9,8 +9,8 @@ import { fonts } from '@/constants/typography';
 const OPTIONS = ['Resumo diário', 'Contas a vencer', 'Lembrete de lançamentos', 'Metas atingidas'];
 
 /**
- * O app ainda não tem notificações (nem push, nem agendamento local) e a API não guarda
- * preferências: as opções aparecem desligadas e bloqueadas, sem salvar nada.
+ * O app já obtém o token de push (`src/lib/notifications.ts`), mas a API ainda não guarda
+ * preferências nem envia notificações: as opções aparecem desligadas e bloqueadas, sem salvar nada.
  */
 export default function NotificationsScreen() {
   return (

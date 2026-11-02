@@ -62,7 +62,30 @@ export function periodLabel(period: MonthPeriod, now: Date = new Date()): string
   return `${MONTH_NAMES[period.month - 1]} de ${period.year}`;
 }
 
+/** "Outubro de 2026" — sempre o nome do mês, sem "Este mês". */
+export function monthYearLabel(period: MonthPeriod): string {
+  const name = MONTH_NAMES[period.month - 1];
+  return `${name.charAt(0).toUpperCase()}${name.slice(1)} de ${period.year}`;
+}
+
 /** "Ago" — rótulo curto para eixos de gráfico. */
 export function shortMonthLabel(period: MonthPeriod): string {
   return SHORT_MONTHS[period.month - 1];
+}
+
+/** "dez/2026" — prazo das metas de economia. */
+export function shortMonthYearLabel(period: MonthPeriod): string {
+  return `${SHORT_MONTHS[period.month - 1].toLowerCase()}/${period.year}`;
+}
+
+/** Último dia do mês como "AAAA-MM-DD" (prazo enviado à API: só mês/ano é escolhido). */
+export function periodEndKey(period: MonthPeriod): string {
+  const lastDay = new Date(period.year, period.month, 0).getDate();
+  return `${period.year}-${String(period.month).padStart(2, '0')}-${lastDay}`;
+}
+
+/** Mês de uma data "AAAA-MM-DD". */
+export function periodFromDateKey(dateKey: string): MonthPeriod {
+  const [year, month] = dateKey.split('-').map(Number);
+  return { year, month };
 }
