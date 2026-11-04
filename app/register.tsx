@@ -1,11 +1,11 @@
 import IconArrowLeft from '@tabler/icons-react-native/IconArrowLeft';
+import IconDeviceMobile from '@tabler/icons-react-native/IconDeviceMobile';
 import IconLock from '@tabler/icons-react-native/IconLock';
 import IconMail from '@tabler/icons-react-native/IconMail';
 import IconUser from '@tabler/icons-react-native/IconUser';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -23,6 +23,7 @@ import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
 import { ApiError } from '@/lib/api';
 import { register } from '@/lib/auth';
+import { formatPhone, phoneDigits } from '@/utils/format';
 import { validateRegisterForm } from '@/utils/validation';
 import type { RegisterFormValues } from '@/utils/validation';
 
@@ -31,6 +32,7 @@ type Field = keyof RegisterFormValues;
 const INITIAL_VALUES: RegisterFormValues = {
   name: '',
   email: '',
+  phone: '',
   password: '',
   confirmPassword: '',
 };
@@ -63,25 +65,22 @@ export default function RegisterScreen() {
   async function handleSubmit() {
     if (submitting) return;
 
-    setTouched({ name: true, email: true, password: true, confirmPassword: true });
+    setTouched({ name: true, email: true, phone: true, password: true, confirmPassword: true });
     if (Object.keys(errors).length > 0) return;
 
     setSubmitError(undefined);
     setSubmitting(true);
     try {
-      const session = await register({
+      await register({
         name: values.name.trim(),
         email: values.email.trim(),
+        phone: values.phone,
         password: values.password,
       });
-      // O cadastro já autentica: limpa a pilha (Login/Cadastro) e abre a tela inicial.
+      // A conta nasce sem o e-mail confirmado: a API já enviou o código e só libera o app depois
+      // dele. Limpa a pilha (Login/Cadastro) e abre a tela do código.
       router.dismissAll();
-      router.replace('/home');
-      // O e-mail de boas-vindas é enviado pela API depois do cadastro (o app não envia e-mails).
-      Alert.alert(
-        'Conta criada',
-        `Bem-vindo ao MiCash, ${session.name}! Enviamos um e-mail de boas-vindas para ${values.email.trim()}.`,
-      );
+      router.replace({ pathname: '/verify-email', params: { from: 'register' } });
     } catch (error) {
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
@@ -149,6 +148,23 @@ export default function RegisterScreen() {
               autoCorrect={false}
               autoComplete="email"
               textContentType="emailAddress"
+            />
+
+            <TextField
+              label="Celular"
+              hideLabel
+              icon={IconDeviceMobile}
+              value={formatPhone(values.phone)}
+              // Guarda só os dígitos; a máscara "(11) 98765-4321" é aplicada na exibição.
+              onChangeText={(text) => setField('phone')(phoneDigits(text))}
+              onBlur={touch('phone')}
+              error={fieldError('phone')}
+              editable={!submitting}
+              placeholder="Celular com DDD"
+              maxLength={20}
+              keyboardType="phone-pad"
+              autoComplete="tel"
+              textContentType="telephoneNumber"
             />
 
             <TextField

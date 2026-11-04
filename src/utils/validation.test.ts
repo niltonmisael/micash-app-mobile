@@ -3,6 +3,7 @@ import {
   PASSWORD_REQUIREMENTS,
   PASSWORD_RULES,
   isValidEmail,
+  isValidMobilePhone,
   isValidPassword,
   isValidResetCode,
   passwordStrength,
@@ -32,6 +33,22 @@ describe('isValidEmail', () => {
   );
 });
 
+describe('isValidMobilePhone', () => {
+  it.each(['11987654321', '(21) 99876-5432', '+55 11 98765-4321'])('aceita %p', (value) => {
+    expect(isValidMobilePhone(value)).toBe(true);
+  });
+
+  it.each([
+    ['vazio', ''],
+    ['incompleto', '1198765432'],
+    ['fixo, sem o 9', '1134567890'],
+    ['celular sem o 9 inicial', '11887654321'],
+    ['DDD com zero', '01987654321'],
+  ])('rejeita %s', (_label, value) => {
+    expect(isValidMobilePhone(value)).toBe(false);
+  });
+});
+
 describe('isValidPassword', () => {
   it.each(['Senha123!', 'Abcdefg1?', 'Xy9*abcd', 'Micash.2026'])('aceita %p', (value) => {
     expect(isValidPassword(value)).toBe(true);
@@ -53,6 +70,7 @@ describe('validateRegisterForm', () => {
   const valid = {
     name: 'Nilton Misael',
     email: 'nilton@micash.com.br',
+    phone: '11987654321',
     password: 'Senha123!',
     confirmPassword: 'Senha123!',
   };
@@ -63,10 +81,17 @@ describe('validateRegisterForm', () => {
 
   it('exige todos os campos', () => {
     expect(
-      validateRegisterForm({ name: '  ', email: '', password: '', confirmPassword: '' }),
+      validateRegisterForm({
+        name: '  ',
+        email: '',
+        phone: '',
+        password: '',
+        confirmPassword: '',
+      }),
     ).toEqual({
       name: 'Informe seu nome completo.',
       email: 'Informe seu e-mail.',
+      phone: 'Informe seu celular.',
       password: 'Informe uma senha.',
       confirmPassword: 'Confirme sua senha.',
     });
@@ -77,11 +102,13 @@ describe('validateRegisterForm', () => {
       validateRegisterForm({
         ...valid,
         email: 'nilton@',
+        phone: '1198765432',
         password: 'fraca',
         confirmPassword: 'outra',
       }),
     ).toEqual({
       email: 'E-mail inválido.',
+      phone: 'Informe um celular válido com DDD, ex.: (11) 98765-4321.',
       password: PASSWORD_REQUIREMENTS,
       confirmPassword: 'As senhas não coincidem.',
     });

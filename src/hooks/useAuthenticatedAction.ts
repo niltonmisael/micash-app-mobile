@@ -3,12 +3,17 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 
 import { usePlan } from '@/hooks/usePlan';
-import { isPlanLimitError } from '@/lib/api';
-import { SessionUnavailableError, clearSession, withSession } from '@/lib/auth';
+import { isEmailNotVerifiedError, isPlanLimitError } from '@/lib/api';
+import {
+  SessionUnavailableError,
+  clearSession,
+  markSessionUnverified,
+  withSession,
+} from '@/lib/auth';
 
 /**
- * A ação foi interrompida e o hook já tratou o motivo (voltou ao Login ou abriu a oferta do
- * Premium): a tela só encerra a ação, sem mostrar erro.
+ * A ação foi interrompida e o hook já tratou o motivo (voltou ao Login, abriu a tela do código do
+ * e-mail ou o aviso do recurso Premium): a tela só encerra a ação, sem mostrar erro.
  */
 export class HandledActionError extends Error {}
 
@@ -20,7 +25,15 @@ export class SessionEndedError extends HandledActionError {
   }
 }
 
-/** A API recusou por limite do plano (403) e a oferta do Premium foi aberta. */
+/** O e-mail da conta ainda não foi confirmado (403 `EMAIL_NOT_VERIFIED`): a tela do código abriu. */
+export class EmailNotVerifiedError extends HandledActionError {
+  constructor() {
+    super('E-mail não confirmado.');
+    this.name = 'EmailNotVerifiedError';
+  }
+}
+
+/** A API recusou por limite do plano (403) e o aviso do recurso Premium foi aberto. */
 export class PremiumOfferShownError extends HandledActionError {
   constructor(message: string) {
     super(message);
@@ -44,6 +57,11 @@ export function useAuthenticatedAction() {
       try {
         return await withSession((token) => action(token));
       } catch (error) {
+        if (isEmailNotVerifiedError(error)) {
+          await markSessionUnverified();
+          router.replace('/verify-email');
+          throw new EmailNotVerifiedError();
+        }
         if (isPlanLimitError(error)) {
           showOffer(error.message);
           throw new PremiumOfferShownError(error.message);

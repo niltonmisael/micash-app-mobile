@@ -25,16 +25,17 @@ type PlanContextValue = {
   limits: PlanLimits | undefined;
   /** GET /api/subscription/limits de novo (ex.: depois de cada mensagem do chat). */
   reloadLimits: () => Promise<void>;
-  /** Abre a oferta do Premium (`message` é o texto da API, quando houver). */
+  /** Abre o aviso de recurso Premium (`message` é o texto da API, quando houver). Não vende nada. */
   showOffer: (message: string, title?: string) => void;
 };
 
 const PlanContext = createContext<PlanContextValue | null>(null);
 
 /**
- * Limites do plano (Free ou Premium) e a oferta do Premium, compartilhados por todas as telas.
+ * Limites do plano (Free ou Premium) e o aviso de recurso Premium, compartilhados por todas as telas.
  * Os limites são carregados ao entrar na área autenticada e recarregados quando o app volta ao
- * primeiro plano (ex.: depois de pagar no Pagar.me) e ao sair da tela de assinatura.
+ * primeiro plano (ex.: depois de assinar no site, o Premium aparece sozinho) e ao sair da tela do
+ * plano. O app não vende assinaturas: o aviso só explica o recurso e leva à tela do plano.
  */
 export function PlanProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
@@ -65,7 +66,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     setOfferVisible(true);
   }, []);
 
-  function subscribe() {
+  function openPlan() {
     setOfferVisible(false);
     router.push('/subscription');
   }
@@ -82,7 +83,7 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         visible={offerVisible}
         title={offer?.title ?? DEFAULT_OFFER_TITLE}
         message={offer?.message ?? ''}
-        onSubscribe={subscribe}
+        onOpenPlan={openPlan}
         onClose={() => setOfferVisible(false)}
       />
     </PlanContext.Provider>

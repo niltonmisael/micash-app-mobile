@@ -7,7 +7,7 @@ import { AppLogo } from '@/components/AppLogo';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { getSession, logout } from '@/lib/auth';
+import { getSession, isSessionVerified, logout } from '@/lib/auth';
 import { authenticateWithBiometrics } from '@/lib/biometrics';
 import { getSettings } from '@/lib/settings';
 
@@ -38,6 +38,8 @@ export default function SplashScreen() {
       const [session, settings] = await startup;
       if (!active) return;
       if (!session) router.replace('/login');
+      // E-mail ainda não confirmado: a tela do código vem antes de tudo (a API bloqueia o resto).
+      else if (!isSessionVerified(session)) router.replace('/verify-email');
       else if (!settings.biometrics) router.replace('/home');
       else if (await authenticateWithBiometrics('Desbloquear o MiCash')) {
         if (active) router.replace('/home');

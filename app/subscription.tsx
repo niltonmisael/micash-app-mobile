@@ -1,22 +1,12 @@
 import IconCheck from '@tabler/icons-react-native/IconCheck';
 import IconCrown from '@tabler/icons-react-native/IconCrown';
 import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { SegmentedControl } from '@/components/SegmentedControl';
 import { Skeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
 import { FREE_BENEFITS, PREMIUM_BENEFITS } from '@/constants/plans';
@@ -26,64 +16,51 @@ import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { usePlan } from '@/hooks/usePlan';
 import { ApiError } from '@/lib/api';
 import {
-  annualDiscountPercent,
+  billingPeriodSuffix,
   cancelSubscription,
-  createCheckout,
-  getSubscriptionData,
+  getCurrentSubscription,
   isFreePlan,
-  plansByCycle,
+  isInPaymentGrace,
   premiumAccessUntil,
   reactivateSubscription,
 } from '@/lib/subscription';
-import type { BillingCycle } from '@/lib/subscription';
 import { SubscriptionStatus } from '@/types/user';
-import type { Plan } from '@/types/user';
 import { formatCurrency, formatDate, toDateKey } from '@/utils/format';
 
 const UNEXPECTED_ERROR = 'Ocorreu um erro inesperado. Tente novamente.';
 
-const CYCLE_SUFFIX: Record<BillingCycle, string> = { monthly: '/mês', annual: '/ano' };
-
-type PendingAction = 'checkout' | 'cancel' | 'reactivate';
+type PendingAction = 'cancel' | 'reactivate';
 
 /** Data UTC da API como "12 dez 2026". */
 function formatApiDate(value: string): string {
   return formatDate(toDateKey(value));
 }
 
+/**
+ * Meu plano: só mostra o que a API diz da assinatura. O app não vende assinaturas (não há preço de
+ * venda, checkout nem convite para assinar); quem já assinou tem o Premium liberado aqui
+ * automaticamente. Cancelar e reativar uma assinatura existente continuam disponíveis.
+ */
 export default function SubscriptionScreen() {
   const runAuthenticated = useAuthenticatedAction();
   const { data, loading, refreshing, error, refresh, retry } =
-    useAuthenticatedQuery(getSubscriptionData);
+    useAuthenticatedQuery(getCurrentSubscription);
   const { reloadLimits } = usePlan();
-  const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [pending, setPending] = useState<PendingAction>();
 
-  // Ao sair da tela (ex.: depois de assinar), os limites são relidos e os cadeados somem.
+  // Ao sair da tela, os limites são relidos (ex.: o Premium foi liberado enquanto ela estava aberta).
   useEffect(() => () => void reloadLimits(), [reloadLimits]);
 
-  const current = data?.current;
-  const plans = plansByCycle(data?.plans ?? []);
-  // `current` só traz assinatura ativa ou pendente (checkout aguardando o pagamento).
-  const premium =
-    current && !isFreePlan(current) && current.status === SubscriptionStatus.Active
-      ? current
-      : undefined;
+  const premium = data && !isFreePlan(data) && data.isPremium ? data : undefined;
+  const inGrace = !!premium && isInPaymentGrace(premium);
+  // Cancelar e reativar só valem para uma assinatura ativa (a API recusa nos outros estados).
+  const active = premium?.status === SubscriptionStatus.Active;
   const paymentPending =
-    !!current && !isFreePlan(current) && current.status === SubscriptionStatus.Pending;
-
-  const cycles = (['monthly', 'annual'] as const).filter((key) => plans[key]);
-  const selectedCycle = plans[cycle] ? cycle : cycles[0];
-  const selectedPlan = selectedCycle ? plans[selectedCycle] : undefined;
-  const discount =
-    plans.monthly && plans.annual ? annualDiscountPercent(plans.monthly, plans.annual) : 0;
+    !!data && !isFreePlan(data) && !data.isPremium && data.status === SubscriptionStatus.Pending;
   const accessUntil = premium ? premiumAccessUntil(premium) : null;
   const accessUntilLabel = accessUntil ? formatApiDate(accessUntil) : 'o fim do período pago';
-  const premiumCycle = (Object.keys(plans) as BillingCycle[]).find(
-    (key) => plans[key]?.id === premium?.planId,
-  );
 
-  async function run(action: PendingAction, task: (token: string) => Promise<void>) {
+  async function run(task: (token: string) => Promise<void>, action: PendingAction) {
     setPending(action);
     try {
       await runAuthenticated(task);
@@ -91,9 +68,7 @@ export default function SubscriptionScreen() {
     } catch (err) {
       if (!(err instanceof HandledActionError)) {
         Alert.alert(
-          action === 'checkout'
-            ? 'Não foi possível iniciar a assinatura'
-            : 'Não foi possível atualizar a assinatura',
+          'Não foi possível atualizar a assinatura',
           err instanceof ApiError ? err.message : UNEXPECTED_ERROR,
         );
       }
@@ -101,15 +76,6 @@ export default function SubscriptionScreen() {
     } finally {
       setPending(undefined);
     }
-  }
-
-  async function subscribe(plan: Plan) {
-    await run('checkout', async (token) => {
-      const url = await createCheckout(token, plan.id);
-      // O pagamento acontece no Pagar.me; a assinatura só muda depois da confirmação do
-      // pagamento no backend (webhook). Ao voltar ao app, a tela recarrega o status.
-      await Linking.openURL(url);
-    });
   }
 
   async function afterChange() {
@@ -126,7 +92,7 @@ export default function SubscriptionScreen() {
           text: 'Cancelar assinatura',
           style: 'destructive',
           onPress: async () => {
-            if (await run('cancel', cancelSubscription)) await afterChange();
+            if (await run(cancelSubscription, 'cancel')) await afterChange();
           },
         },
       ],
@@ -134,7 +100,7 @@ export default function SubscriptionScreen() {
   }
 
   async function reactivate() {
-    if (await run('reactivate', reactivateSubscription)) {
+    if (await run(reactivateSubscription, 'reactivate')) {
       await afterChange();
       Alert.alert('Assinatura reativada', 'Seu Premium continua renovando normalmente.');
     }
@@ -142,7 +108,7 @@ export default function SubscriptionScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <ScreenHeader title="Assinatura" />
+      <ScreenHeader title="Meu plano" />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={
@@ -154,10 +120,6 @@ export default function SubscriptionScreen() {
           />
         }
       >
-        <Text style={styles.title} accessibilityRole="header">
-          {premium ? 'Seu plano' : 'Escolha seu plano'}
-        </Text>
-
         {!!error && (
           <ErrorNotice message={error} onRetry={retry} retrying={loading || refreshing} />
         )}
@@ -165,9 +127,8 @@ export default function SubscriptionScreen() {
         {!data ? (
           loading && (
             <View style={styles.loading}>
-              <Skeleton width={320} height={48} />
-              <Skeleton width={320} height={180} />
-              <Skeleton width={320} height={220} />
+              <Skeleton width={320} height={200} />
+              <Skeleton width={320} height={200} />
             </View>
           )
         ) : premium ? (
@@ -177,10 +138,19 @@ export default function SubscriptionScreen() {
                 <Text style={styles.planName}>{premium.planName}</Text>
                 <IconCrown size={22} color={colors.primary} />
               </View>
-              <Price value={premium.price} suffix={premiumCycle && CYCLE_SUFFIX[premiumCycle]} />
+              <Price value={premium.price} suffix={billingPeriodSuffix(premium.billingPeriod)} />
               <BenefitList items={PREMIUM_BENEFITS} />
 
-              {premium.cancelAtPeriodEnd ? (
+              {inGrace ? (
+                <View style={styles.notice}>
+                  <Text style={styles.noticeTitle}>Renovação pendente</Text>
+                  <Text style={styles.noticeText}>
+                    Não conseguimos confirmar a renovação da sua assinatura. Seu Premium continua
+                    até {accessUntilLabel} enquanto a cobrança é tentada novamente. Confira a forma
+                    de pagamento cadastrada na sua assinatura.
+                  </Text>
+                </View>
+              ) : premium.cancelAtPeriodEnd ? (
                 <View style={styles.notice}>
                   <Text style={styles.noticeTitle}>Cancelamento agendado</Text>
                   <Text style={styles.noticeText}>
@@ -191,12 +161,13 @@ export default function SubscriptionScreen() {
               ) : (
                 premium.nextBillingDate && (
                   <Text style={styles.detail}>
-                    Próxima cobrança em {formatApiDate(premium.nextBillingDate)}
+                    {premium.autoRenew ? 'Renova em ' : 'Válido até '}
+                    {formatApiDate(premium.nextBillingDate)}
                   </Text>
                 )
               )}
 
-              {premium.cancelAtPeriodEnd ? (
+              {active && premium.cancelAtPeriodEnd ? (
                 <PrimaryButton
                   title="Reativar assinatura"
                   onPress={reactivate}
@@ -211,7 +182,7 @@ export default function SubscriptionScreen() {
               )}
             </View>
 
-            {!premium.cancelAtPeriodEnd && (
+            {active && !premium.cancelAtPeriodEnd && (
               <Pressable
                 style={styles.cancelLink}
                 onPress={confirmCancel}
@@ -227,66 +198,37 @@ export default function SubscriptionScreen() {
           </>
         ) : (
           <>
-            {cycles.length > 1 && (
-              <SegmentedControl
-                options={cycles.map((key) => ({
-                  key,
-                  label:
-                    key === 'monthly' ? 'Mensal' : discount ? `Anual (${discount}% OFF)` : 'Anual',
-                }))}
-                value={selectedCycle!}
-                onChange={setCycle}
-                style={styles.cycles}
-              />
-            )}
-
             {paymentPending && (
               <View style={[styles.notice, styles.noticeTop]}>
-                <Text style={styles.noticeTitle}>Pagamento pendente</Text>
+                <Text style={styles.noticeTitle}>Pagamento em confirmação</Text>
                 <Text style={styles.noticeText}>
-                  Assim que o Pagar.me confirmar o pagamento, seu Premium é ativado. Puxe a tela
-                  para atualizar.
+                  Assim que o pagamento for confirmado, seu Premium é liberado aqui automaticamente.
+                  Puxe a tela para atualizar.
                 </Text>
               </View>
             )}
 
             <View style={styles.card}>
               <Text style={styles.planName}>Gratuito</Text>
-              <Price value={0} suffix="/mês" />
               <BenefitList items={FREE_BENEFITS} />
               <View style={styles.currentBadge}>
                 <Text style={styles.currentBadgeText}>Plano atual</Text>
               </View>
             </View>
 
-            {/* O Premium aparece mesmo sem plano na API: os benefícios continuam visíveis. */}
+            {/* Só informa o que é do Premium: sem preço de venda e sem botão de assinar. */}
             <View style={[styles.card, styles.cardPremium]}>
               <View style={styles.planHeader}>
-                <Text style={styles.planName}>Premium</Text>
+                <Text style={styles.planName}>Recursos do Premium</Text>
                 <IconCrown size={22} color={colors.primary} />
               </View>
-              {selectedPlan && (
-                <Price value={selectedPlan.price} suffix={CYCLE_SUFFIX[selectedCycle!]} />
-              )}
               <BenefitList items={PREMIUM_BENEFITS} />
-              <PrimaryButton
-                title={selectedPlan ? 'Assinar agora' : 'Assinatura indisponível no momento'}
-                onPress={() => selectedPlan && subscribe(selectedPlan)}
-                loading={pending === 'checkout'}
-                disabled={!selectedPlan || pending !== undefined}
-                style={styles.button}
-              />
             </View>
 
-            {!!selectedPlan && (
-              <>
-                <Text style={styles.footnote}>Cancele quando quiser.</Text>
-                <Text style={styles.footnote}>
-                  O pagamento é feito no Pagar.me. Sua assinatura é ativada depois da confirmação do
-                  pagamento.
-                </Text>
-              </>
-            )}
+            <Text style={styles.footnote}>
+              Se você já tem o Premium, ele é liberado automaticamente quando você entra com a mesma
+              conta.
+            </Text>
           </>
         )}
       </ScrollView>
@@ -326,18 +268,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 24,
   },
-  title: {
-    fontFamily: fonts.semiBold,
-    fontSize: 22,
-    color: colors.textPrimary,
-    textAlign: 'center',
-    marginBottom: 18,
-  },
   loading: {
     gap: 14,
-  },
-  cycles: {
-    marginBottom: 14,
   },
   card: {
     backgroundColor: colors.white,

@@ -133,7 +133,7 @@ function LockedForecast({ onPress }: { onPress: () => void }) {
       onPress={onPress}
       style={({ pressed }) => [styles.card, styles.lockedCard, pressed && styles.pressed]}
       accessibilityRole="button"
-      accessibilityLabel="Previsão do mês, recurso Premium. Veja quanto vai sobrar no fim do mês com o Premium"
+      accessibilityLabel="Previsão do mês, recurso Premium. A previsão do fim do mês faz parte do plano Premium"
     >
       <View style={styles.placeholder} importantForAccessibility="no-hide-descendants">
         <View style={[styles.placeholderLine, { width: '70%' }]} />
@@ -144,8 +144,8 @@ function LockedForecast({ onPress }: { onPress: () => void }) {
         <View style={styles.lockIcon}>
           <IconLock size={20} color={colors.primary} />
         </View>
-        <Text style={styles.lockText}>Veja quanto vai sobrar no fim do mês com o Premium</Text>
-        <Text style={styles.lockAction}>Conhecer o Premium</Text>
+        <Text style={styles.lockText}>A previsão do fim do mês faz parte do plano Premium</Text>
+        <Text style={styles.lockAction}>Ver meu plano</Text>
       </View>
     </Pressable>
   );

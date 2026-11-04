@@ -59,10 +59,11 @@ export default function ProfileScreen() {
   }
 
   const subscription = data?.subscription;
+  // Só a API decide o Premium: um pagamento ainda em confirmação continua como Gratuito.
   const planLabel = subscription
-    ? isFreePlan(subscription)
-      ? 'Gratuito'
-      : subscription.planName
+    ? subscription.isPremium
+      ? subscription.planName
+      : 'Gratuito'
     : undefined;
 
   return (
@@ -137,9 +138,9 @@ export default function ProfileScreen() {
           />
           <MenuRow
             icon={IconStar}
-            label="Assinatura"
+            label="Meu plano"
             value={planLabel}
-            valueHighlighted={!!subscription && !isFreePlan(subscription)}
+            valueHighlighted={!!subscription?.isPremium}
             description={
               subscription && !isFreePlan(subscription)
                 ? subscriptionStatusLabel(subscription)

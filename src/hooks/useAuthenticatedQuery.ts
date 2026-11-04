@@ -3,13 +3,20 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { usePlan } from '@/hooks/usePlan';
-import { ApiError, isPlanLimitError } from '@/lib/api';
-import { SessionUnavailableError, clearSession, getSession, withSession } from '@/lib/auth';
+import { ApiError, isEmailNotVerifiedError, isPlanLimitError } from '@/lib/api';
+import {
+  SessionUnavailableError,
+  clearSession,
+  getSession,
+  markSessionUnverified,
+  withSession,
+} from '@/lib/auth';
 
 type LoadResult<T> =
   | { kind: 'ok'; firstName: string; data: T }
   | { kind: 'no-session' }
   | { kind: 'expired' }
+  | { kind: 'email-not-verified' }
   | { kind: 'plan-limit'; firstName: string; message: string }
   | { kind: 'error'; firstName: string; message: string };
 
@@ -25,6 +32,8 @@ async function runQuery<T>(fetcher: (token: string) => Promise<T>): Promise<Load
     if (err instanceof SessionUnavailableError) {
       return err.reason === 'expired' ? { kind: 'expired' } : { kind: 'no-session' };
     }
+    // E-mail ainda não confirmado: a API bloqueia tudo até o código; a tela do código assume.
+    if (isEmailNotVerifiedError(err)) return { kind: 'email-not-verified' };
     // Limite do plano (ex.: mês fora do histórico do Free) não é erro: a tela mostra o cadeado.
     if (isPlanLimitError(err)) return { kind: 'plan-limit', firstName, message: err.message };
     // Falha de rede tem mensagem própria; outros erros da API ficam com uma mensagem genérica.
@@ -82,6 +91,10 @@ export function useAuthenticatedQuery<T>(fetcher: (token: string) => Promise<T>)
           return;
         case 'no-session':
           router.replace('/login');
+          return;
+        case 'email-not-verified':
+          await markSessionUnverified();
+          router.replace('/verify-email');
           return;
         case 'expired':
           await signOut();

@@ -5,11 +5,13 @@ import {
   formatCurrency,
   formatDate,
   formatPercent,
+  formatPhone,
   formatRelativeDate,
   formatTime,
   localDateKey,
   maskEmail,
   parseCentsInput,
+  phoneDigits,
   toDateKey,
   toExpenseDateTime,
 } from './format';
@@ -158,5 +160,30 @@ describe('formatBrasiliaTime', () => {
 
   it('devolve vazio para datas inválidas', () => {
     expect(formatBrasiliaTime('não é data')).toBe('');
+  });
+});
+
+describe('phoneDigits', () => {
+  it.each([
+    ['(11) 98765-4321', '11987654321'],
+    ['+55 11 98765-4321', '11987654321'],
+    ['119876543210000', '11987654321'],
+    ['abc', ''],
+  ])('%p → %p', (value, expected) => {
+    expect(phoneDigits(value)).toBe(expected);
+  });
+});
+
+describe('formatPhone', () => {
+  it.each([
+    ['', ''],
+    ['1', '(1'],
+    ['11', '(11'],
+    ['11987', '(11) 987'],
+    ['1198765', '(11) 98765'],
+    ['11987654', '(11) 98765-4'],
+    ['11987654321', '(11) 98765-4321'],
+  ])('%p → %p', (value, expected) => {
+    expect(formatPhone(value)).toBe(expected);
   });
 });

@@ -1,5 +1,8 @@
-// Benefícios exibidos na tela de assinatura. A API não informa benefícios (só nome e preço do
-// plano); os textos espelham os limites aplicados pelo backend (GET /api/subscription/limits).
+// Benefícios exibidos na tela do plano. A API não informa benefícios; os textos espelham os limites
+// aplicados pelo backend (GET /api/subscription/limits).
+//
+// O app não vende assinaturas (a contratação é feita no site): nenhum texto aqui convida a assinar,
+// mostra preço de venda ou aponta para um pagamento. Os avisos só explicam o que é do Premium.
 
 export const FREE_BENEFITS = [
   'Lançamentos ilimitados',
@@ -17,12 +20,13 @@ export const PREMIUM_BENEFITS = [
   'Metas e caixinhas ilimitadas',
 ];
 
-/** Oferta padrão quando o app bloqueia antes de chamar a API (a API manda o próprio texto). */
+/** Aviso padrão quando o app bloqueia antes de chamar a API (a API manda o próprio texto). */
 export const PREMIUM_OFFERS = {
-  history: 'Veja todo o seu histórico com o Premium.',
-  copyGoals: 'Copie suas metas para outro mês com o Premium.',
-  insights: 'Veja todos os insights e a análise da MI com o Premium.',
+  history: 'O histórico completo faz parte do plano Premium.',
+  copyGoals: 'Copiar metas para outro mês é um recurso do plano Premium.',
+  insights: 'Todos os insights e a análise da MI fazem parte do plano Premium.',
   goals:
-    'O plano gratuito permite até 3 metas de gasto por mês. Assine o Premium para ter metas ilimitadas.',
-  savings: 'O plano gratuito permite 1 caixinha. Assine o Premium para ter caixinhas ilimitadas.',
+    'O plano gratuito permite até 3 metas de gasto por mês. Metas ilimitadas fazem parte do plano Premium.',
+  savings:
+    'O plano gratuito permite 1 caixinha. Caixinhas ilimitadas fazem parte do plano Premium.',
 } as const;

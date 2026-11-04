@@ -10,12 +10,12 @@ type PremiumLockedCardProps = {
   title: string;
   /** Sem mensagem, o cartão fica compacto (ex.: insights bloqueados em sequência). */
   message?: string;
-  /** Abre a oferta do Premium. */
+  /** Abre o aviso do recurso Premium. */
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
 };
 
-/** Conteúdo do Premium bloqueado no plano gratuito: cadeado, coroa e toque para a oferta. */
+/** Conteúdo do Premium bloqueado no plano gratuito: cadeado, coroa e toque para o aviso do recurso. */
 export function PremiumLockedCard({ title, message, onPress, style }: PremiumLockedCardProps) {
   return (
     <Pressable

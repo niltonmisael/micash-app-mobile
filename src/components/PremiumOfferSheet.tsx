@@ -10,16 +10,20 @@ type PremiumOfferSheetProps = {
   visible: boolean;
   title: string;
   message: string;
-  onSubscribe: () => void;
+  /** Abre a tela do plano (o que o usuário tem e o que é do Premium). */
+  onOpenPlan: () => void;
   onClose: () => void;
 };
 
-/** Oferta do Premium ao chegar num limite do plano gratuito (não é um erro). */
+/**
+ * Aviso de recurso Premium ao chegar num limite do plano gratuito (não é um erro). O app não vende
+ * assinaturas: o aviso explica o recurso, sem preço nem botão de compra.
+ */
 export function PremiumOfferSheet({
   visible,
   title,
   message,
-  onSubscribe,
+  onOpenPlan,
   onClose,
 }: PremiumOfferSheetProps) {
   return (
@@ -31,9 +35,9 @@ export function PremiumOfferSheet({
         {title}
       </Text>
       <Text style={styles.message}>{message}</Text>
-      <PrimaryButton title="Assinar Premium" onPress={onSubscribe} style={styles.button} />
+      <PrimaryButton title="Ver meu plano" onPress={onOpenPlan} style={styles.button} />
       <Pressable style={styles.later} onPress={onClose} hitSlop={8} accessibilityRole="button">
-        <Text style={styles.laterText}>Agora não</Text>
+        <Text style={styles.laterText}>Fechar</Text>
       </Pressable>
     </BottomSheet>
   );

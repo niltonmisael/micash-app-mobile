@@ -1,13 +1,14 @@
+import * as subscriptionModule from './subscription';
 import {
-  annualDiscountPercent,
+  billingPeriodSuffix,
   cancelSubscription,
   chatMonthExhaustedMessage,
   chatUsageLabel,
-  createCheckout,
+  getCurrentSubscription,
   getPlanLimits,
   isFreePlan,
   isHistoryLocked,
-  plansByCycle,
+  isInPaymentGrace,
   premiumAccessUntil,
   reachedLimit,
   reactivateSubscription,
@@ -15,17 +16,24 @@ import {
 } from './subscription';
 import { changePassword, updateProfile } from './user';
 import { SubscriptionStatus } from '@/types/user';
-import type { CurrentSubscription, Plan, PlanLimits } from '@/types/user';
+import type { CurrentSubscription, PlanLimits } from '@/types/user';
 
 const subscription = (changes: Partial<CurrentSubscription>): CurrentSubscription => ({
   planId: null,
   planName: 'Free',
   status: SubscriptionStatus.Pending,
   statusDescription: 'Free',
+  isPremium: false,
+  startsAt: null,
   cancelAtPeriodEnd: false,
+  autoRenew: false,
   nextBillingDate: null,
+  accessEndsAt: null,
+  paymentGraceUntil: null,
   endsAt: null,
+  cancellationScheduledFor: null,
   price: 0,
+  billingPeriod: null,
   ...changes,
 });
 
@@ -37,54 +45,56 @@ describe('isFreePlan / subscriptionStatusLabel', () => {
   });
 
   it.each([
-    [SubscriptionStatus.Pending, 'Pagamento pendente'],
+    [SubscriptionStatus.Pending, 'Pagamento em confirmação'],
     [SubscriptionStatus.Active, 'Ativa'],
     [SubscriptionStatus.PastDue, 'Pagamento em atraso'],
     [SubscriptionStatus.Cancelled, 'Cancelada'],
     [SubscriptionStatus.Expired, 'Expirada'],
-    [SubscriptionStatus.PaymentFailed, 'Falha no pagamento'],
+    [SubscriptionStatus.PaymentFailed, 'Renovação pendente'],
   ])('status %p de plano pago vira %p', (status, label) => {
     expect(subscriptionStatusLabel(subscription({ planId: 1, planName: 'Premium', status }))).toBe(
       label,
     );
   });
+
+  it('Premium com cancelamento agendado aparece como tal', () => {
+    const cancelling = subscription({
+      planId: 1,
+      status: SubscriptionStatus.Active,
+      isPremium: true,
+      cancelAtPeriodEnd: true,
+    });
+    expect(subscriptionStatusLabel(cancelling)).toBe('Cancelamento agendado');
+  });
 });
 
-describe('plansByCycle / annualDiscountPercent', () => {
-  const plan = (id: number, name: string, price: number): Plan => ({ id, name, price });
-  const monthly = plan(1, 'Premium Mensal', 14.9);
-  const annual = plan(2, 'Premium Anual', 149.9);
-
-  it('identifica mensal e anual pelo nome, em qualquer ordem', () => {
-    expect(plansByCycle([annual, monthly])).toEqual({ monthly, annual });
+describe('periodicidade e tolerância', () => {
+  it('billingPeriodSuffix usa a periodicidade informada pela API', () => {
+    expect(billingPeriodSuffix('Monthly')).toBe('/mês');
+    expect(billingPeriodSuffix('Yearly')).toBe('/ano');
+    expect(billingPeriodSuffix(null)).toBeUndefined();
   });
 
-  it('sem pista no nome, o mais barato é o mensal e o mais caro, o anual', () => {
-    const a = plan(3, 'Plano Premium', 149.9);
-    const b = plan(4, 'Plano Premium', 14.9);
-    expect(plansByCycle([a, b])).toEqual({ monthly: b, annual: a });
-  });
-
-  it('com um plano só, ele é o mensal (a menos que o nome diga anual)', () => {
-    expect(plansByCycle([plan(5, 'Premium', 14.9)])).toEqual({
-      monthly: plan(5, 'Premium', 14.9),
-      annual: undefined,
+  it('isInPaymentGrace: renovação recusada com o Premium ainda liberado pela API', () => {
+    const grace = subscription({
+      planId: 1,
+      status: SubscriptionStatus.PaymentFailed,
+      isPremium: true,
+      paymentGraceUntil: '2026-11-13T12:00:00Z',
     });
-    expect(plansByCycle([annual])).toEqual({ monthly: undefined, annual });
-    expect(plansByCycle([])).toEqual({ monthly: undefined, annual: undefined });
-  });
-
-  it('calcula o desconto do anual sobre 12 mensalidades (149,90 x 178,80 = 16%)', () => {
-    expect(annualDiscountPercent(monthly, annual)).toBe(16);
-    expect(annualDiscountPercent(monthly, plan(6, 'Anual', 200))).toBe(0);
+    expect(isInPaymentGrace(grace)).toBe(true);
+    // Fora da tolerância a API já devolve isPremium falso: o app não decide sozinho.
+    expect(isInPaymentGrace({ ...grace, isPremium: false })).toBe(false);
+    expect(isInPaymentGrace({ ...grace, status: SubscriptionStatus.Active })).toBe(false);
   });
 });
 
 describe('premiumAccessUntil', () => {
-  it('usa a data agendada do cancelamento e, sem ela, o fim ou a próxima cobrança', () => {
+  it('usa o fim do acesso informado pela API e, sem ele, o agendamento, o fim ou a próxima cobrança', () => {
     const premium = subscription({
       planId: 1,
       status: SubscriptionStatus.Active,
+      isPremium: true,
       cancelAtPeriodEnd: true,
       nextBillingDate: '2026-12-03T00:00:00Z',
     });
@@ -92,7 +102,18 @@ describe('premiumAccessUntil', () => {
     expect(
       premiumAccessUntil({ ...premium, cancellationScheduledFor: '2026-12-04T00:00:00Z' }),
     ).toBe('2026-12-04T00:00:00Z');
+    expect(premiumAccessUntil({ ...premium, accessEndsAt: '2026-12-05T00:00:00Z' })).toBe(
+      '2026-12-05T00:00:00Z',
+    );
     expect(premiumAccessUntil({ ...premium, nextBillingDate: null })).toBeNull();
+  });
+});
+
+describe('o app só consome a assinatura', () => {
+  it('não há checkout nem venda de planos no app (a contratação é feita no site)', () => {
+    expect(Object.keys(subscriptionModule)).not.toEqual(expect.arrayContaining(['createCheckout']));
+    expect(Object.keys(subscriptionModule)).not.toContain('getPlans');
+    expect(Object.keys(subscriptionModule)).not.toContain('plansByCycle');
   });
 });
 
@@ -113,6 +134,17 @@ describe('chamadas da API', () => {
       text: async () => (json === undefined ? '' : JSON.stringify(json)),
     };
   }
+
+  it('getCurrentSubscription lê GET /api/subscription/current com o token', async () => {
+    const premium = subscription({ planId: 1, isPremium: true, billingPeriod: 'Yearly' });
+    fetchMock.mockResolvedValue(respond(200, premium));
+
+    await expect(getCurrentSubscription('token')).resolves.toEqual(premium);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://api.test/api/subscription/current');
+    expect(init.method).toBe('GET');
+    expect(init.headers.Authorization).toBe('Bearer token');
+  });
 
   it('cancelSubscription agenda o cancelamento com DELETE /api/subscription/cancel', async () => {
     fetchMock.mockResolvedValue(respond(200));
@@ -145,29 +177,7 @@ describe('chamadas da API', () => {
     expect(init.body).toBeUndefined();
   });
 
-  it('createCheckout envia o planId e devolve o link de pagamento', async () => {
-    fetchMock.mockResolvedValue(respond(200, { checkoutUrl: 'https://pagar.me/link' }));
-
-    await expect(createCheckout('token', 7)).resolves.toBe('https://pagar.me/link');
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('http://api.test/api/checkout');
-    expect(init.method).toBe('POST');
-    expect(init.body).toBe('{"planId":7}');
-    expect(init.headers.Authorization).toBe('Bearer token');
-  });
-
-  it('createCheckout repassa a mensagem da API (ex.: assinatura já ativa)', async () => {
-    fetchMock.mockResolvedValue(
-      respond(400, { errorMessages: ['Você já possui uma assinatura ativa.'] }),
-    );
-
-    await expect(createCheckout('token', 7)).rejects.toMatchObject({
-      message: 'Você já possui uma assinatura ativa.',
-      status: 400,
-    });
-  });
-
-  it('updateProfile envia só nome e e-mail', async () => {
+  it('updateProfile envia o nome e o e-mail atual', async () => {
     fetchMock.mockResolvedValue(respond(204));
 
     await updateProfile('token', { name: 'Nilton', email: 'n@micash.com.br' });
@@ -240,7 +250,7 @@ describe('limites do plano', () => {
 
   it('chatMonthExhaustedMessage usa o limite informado pela API', () => {
     expect(chatMonthExhaustedMessage(free.chat)).toBe(
-      'Você usou suas 5 mensagens do mês. Assine o Premium para continuar conversando.',
+      'Você usou suas 5 mensagens do mês com a MI. Novas mensagens são liberadas no próximo mês.',
     );
     expect(chatMonthExhaustedMessage({ ...free.chat, limit: 10 })).toContain('suas 10 mensagens');
   });

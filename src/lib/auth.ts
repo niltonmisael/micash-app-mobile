@@ -16,9 +16,33 @@ export async function login(credentials: LoginRequest): Promise<Session> {
   return saveSession(await apiPost<Session>('/login', credentials));
 }
 
-/** O cadastro já devolve os tokens (mesma resposta do login), então o usuário sai autenticado. */
+/**
+ * O cadastro já devolve os tokens (mesma resposta do login), mas com `emailVerified: false`: a
+ * conta só libera o app depois do código enviado por e-mail (tela `verify-email`).
+ */
 export async function register(data: RegisterRequest): Promise<Session> {
   return saveSession(await apiPost<Session>('/api/user/register', data));
+}
+
+/** Troca a sessão salva (ex.: tokens novos devolvidos pela confirmação do e-mail). */
+export async function replaceSession(session: Session): Promise<Session> {
+  return saveSession(session);
+}
+
+/** Sessões antigas, sem o campo, contam como verificadas (a API marcou essas contas). */
+export function isSessionVerified(session: Session): boolean {
+  return session.emailVerified !== false;
+}
+
+/**
+ * A API respondeu 403 `EMAIL_NOT_VERIFIED`: guarda isso na sessão, para a Splash e o Login
+ * abrirem a tela do código em vez da área autenticada.
+ */
+export async function markSessionUnverified(): Promise<void> {
+  const session = await getSession();
+  if (session && session.emailVerified !== false) {
+    await saveSession({ ...session, emailVerified: false });
+  }
 }
 
 /** Sessão salva no aparelho, ou `null` se não houver (ou se não puder ser lida). */

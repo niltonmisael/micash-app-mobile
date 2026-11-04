@@ -1,9 +1,11 @@
 import IconMail from '@tabler/icons-react-native/IconMail';
 import IconUser from '@tabler/icons-react-native/IconUser';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Pressable,
   Platform,
   ScrollView,
   StyleSheet,
@@ -60,37 +62,33 @@ export default function PersonalDataScreen() {
 }
 
 function ProfileForm({ profile }: { profile: UserProfile }) {
+  const router = useRouter();
   const runAuthenticated = useAuthenticatedAction();
   const [name, setName] = useState(profile.name);
-  const [email, setEmail] = useState(profile.email);
   const [saved, setSaved] = useState(profile);
   const [showErrors, setShowErrors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
 
-  const errors = validateProfileForm({ name, email });
-  const changed = name.trim() !== saved.name || email.trim() !== saved.email;
+  // O e-mail não muda aqui (a API exige o código no novo endereço): vai como está, só o nome muda.
+  const errors = validateProfileForm({ name, email: saved.email });
+  const changed = name.trim() !== saved.name;
 
   async function handleSave() {
     if (submitting) return;
     setShowErrors(true);
     if (Object.keys(errors).length > 0) return;
 
-    const data = { name: name.trim(), email: email.trim() };
+    const data = { name: name.trim(), email: saved.email };
     setSubmitError(undefined);
     setSubmitting(true);
     try {
       await runAuthenticated((token) => updateProfile(token, data));
       // O nome também fica na sessão (saudação do Dashboard).
       await updateSessionName(data.name);
-      setSaved(data);
+      setSaved({ ...saved, name: data.name });
       setShowErrors(false);
-      Alert.alert(
-        'Dados atualizados',
-        data.email !== profile.email
-          ? `Use ${data.email} para entrar na próxima vez.`
-          : 'Suas alterações foram salvas.',
-      );
+      Alert.alert('Dados atualizados', 'Suas alterações foram salvas.');
     } catch (err) {
       if (err instanceof HandledActionError) return;
       setSubmitError(
@@ -127,19 +125,23 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
         <TextField
           label="E-mail"
           icon={IconMail}
-          value={email}
-          onChangeText={setEmail}
-          error={showErrors ? errors.email : undefined}
-          maxLength={255}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-          autoComplete="email"
-          textContentType="emailAddress"
-          editable={!submitting}
+          value={saved.email}
+          editable={false}
+          accessory={
+            <Pressable
+              onPress={() => router.push('/change-email')}
+              disabled={submitting}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Alterar e-mail"
+            >
+              <Text style={styles.changeEmail}>Alterar</Text>
+            </Pressable>
+          }
         />
         <Text style={styles.hint}>
-          O e-mail é usado para entrar no app. Telefone ainda não pode ser editado por aqui.
+          O e-mail é usado para entrar no app. Para trocá-lo, enviamos um código ao novo endereço.
+          Telefone ainda não pode ser editado por aqui.
         </Text>
       </View>
 
@@ -187,6 +189,11 @@ const styles = StyleSheet.create({
   },
   fields: {
     gap: 18,
+  },
+  changeEmail: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: colors.primary,
   },
   hint: {
     fontFamily: fonts.regular,

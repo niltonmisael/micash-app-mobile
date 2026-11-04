@@ -1,8 +1,18 @@
+import { phoneDigits } from '@/utils/format';
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Validação apenas de formato, sem verificar se o e-mail existe. */
 export function isValidEmail(value: string): boolean {
   return EMAIL_PATTERN.test(value.trim());
+}
+
+/**
+ * Celular brasileiro: DDD (dois dígitos de 1 a 9) + 9 dígitos começando com 9. A API não valida o
+ * telefone (aceita até 20 caracteres); a regra fica no app e na web.
+ */
+export function isValidMobilePhone(value: string): boolean {
+  return /^[1-9][1-9]9\d{8}$/.test(phoneDigits(value));
 }
 
 export const PASSWORD_REQUIREMENTS =
@@ -28,6 +38,8 @@ export function isValidPassword(value: string): boolean {
 export type RegisterFormValues = {
   name: string;
   email: string;
+  /** Só os dígitos (DDD + número), como vão para a API. */
+  phone: string;
   password: string;
   confirmPassword: string;
 };
@@ -41,6 +53,10 @@ export function validateRegisterForm(values: RegisterFormValues): RegisterFormEr
 
   if (!values.email.trim()) errors.email = 'Informe seu e-mail.';
   else if (!isValidEmail(values.email)) errors.email = 'E-mail inválido.';
+
+  if (!values.phone) errors.phone = 'Informe seu celular.';
+  else if (!isValidMobilePhone(values.phone))
+    errors.phone = 'Informe um celular válido com DDD, ex.: (11) 98765-4321.';
 
   if (!values.password) errors.password = 'Informe uma senha.';
   else if (!isValidPassword(values.password)) errors.password = PASSWORD_REQUIREMENTS;

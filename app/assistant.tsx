@@ -435,7 +435,7 @@ export default function AssistantScreen() {
               hitSlop={8}
               accessibilityRole="button"
             >
-              <Text style={styles.retry}>Assinar</Text>
+              <Text style={styles.retry}>Ver plano</Text>
             </Pressable>
           </View>
         ) : blockedUntil ? (

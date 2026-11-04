@@ -35,6 +35,14 @@ export function isPlanLimitError(error: unknown): error is ApiError {
   );
 }
 
+/**
+ * E-mail ainda não confirmado (403 `EMAIL_NOT_VERIFIED`): a API bloqueia tudo, exceto as rotas da
+ * verificação, até o código ser digitado. O app abre a tela `verify-email`.
+ */
+export function isEmailNotVerifiedError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 403 && error.code === 'EMAIL_NOT_VERIFIED';
+}
+
 /** Limite de mensagens do chat no Premium (429 `CHAT_RATE_LIMIT`), liberado em `retryAt`. */
 export function isChatRateLimitError(error: unknown): error is ApiError {
   return error instanceof ApiError && error.status === 429 && error.code === 'CHAT_RATE_LIMIT';
@@ -133,9 +141,13 @@ export async function apiGet<TResponse>(
   return readJson<TResponse>(await request('GET', path, { token, params, ...options }));
 }
 
-/** PUT autenticado (a API responde 204, sem corpo). */
-export async function apiPut(path: string, body: unknown, token: string): Promise<void> {
-  await request('PUT', path, { body, token });
+/** PUT autenticado. A maioria das rotas responde 204 (→ `null`); algumas devolvem um corpo JSON. */
+export async function apiPut<TResponse = void>(
+  path: string,
+  body: unknown,
+  token: string,
+): Promise<TResponse | null> {
+  return readJson<TResponse>(await request('PUT', path, { body, token }));
 }
 
 /** DELETE autenticado (a API responde 204, sem corpo). Algumas rotas recebem um corpo JSON. */

@@ -122,3 +122,22 @@ export function formatTime(value: string): string {
   if (Number.isNaN(date.getTime())) return '';
   return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
+
+/**
+ * Dígitos do celular (DDD + número, até 11), como são enviados à API: "11987654321".
+ * Colado com o código do país ("+55 11 98765-4321"), descarta o 55.
+ */
+export function phoneDigits(value: string): string {
+  let digits = value.replace(/\D/g, '');
+  if (digits.length > 11 && digits.startsWith('55')) digits = digits.slice(2);
+  return digits.slice(0, 11);
+}
+
+/** Máscara durante a digitação: "11987654321" → "(11) 98765-4321". */
+export function formatPhone(value: string): string {
+  const digits = phoneDigits(value);
+  if (digits.length === 0) return '';
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}

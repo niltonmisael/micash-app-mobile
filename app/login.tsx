@@ -23,7 +23,7 @@ import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
 import { ApiError } from '@/lib/api';
-import { login } from '@/lib/auth';
+import { isSessionVerified, login } from '@/lib/auth';
 import { isValidEmail } from '@/utils/validation';
 
 // Login social ainda não existe; o aviso deixa isso explícito.
@@ -49,8 +49,9 @@ export default function LoginScreen() {
     setSubmitError(undefined);
     setSubmitting(true);
     try {
-      await login({ email: email.trim(), password });
-      router.replace('/home');
+      const session = await login({ email: email.trim(), password });
+      // Cadastro ainda sem o e-mail confirmado: o login funciona, mas o app abre a tela do código.
+      router.replace(isSessionVerified(session) ? '/home' : '/verify-email');
     } catch (error) {
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
