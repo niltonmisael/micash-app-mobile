@@ -3,6 +3,7 @@ import IconArrowUp from '@tabler/icons-react-native/IconArrowUp';
 import IconBulb from '@tabler/icons-react-native/IconBulb';
 import IconChartPie from '@tabler/icons-react-native/IconChartPie';
 import IconChevronRight from '@tabler/icons-react-native/IconChevronRight';
+import IconCrown from '@tabler/icons-react-native/IconCrown';
 import IconDots from '@tabler/icons-react-native/IconDots';
 import IconInfoCircle from '@tabler/icons-react-native/IconInfoCircle';
 import IconMessagePlus from '@tabler/icons-react-native/IconMessagePlus';
@@ -30,7 +31,13 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { RichText } from '@/components/RichText';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import {
+  HandledActionError,
+  PremiumOfferShownError,
+  useAuthenticatedAction,
+} from '@/hooks/useAuthenticatedAction';
+import { usePlan } from '@/hooks/usePlan';
+import { isChatRateLimitError } from '@/lib/api';
 import {
   CHAT_MESSAGE_MAX_LENGTH,
   chatErrorMessage,
@@ -39,9 +46,14 @@ import {
   startNewConversation,
 } from '@/lib/assistant';
 import { getSession } from '@/lib/auth';
+import { chatMonthExhaustedMessage, chatUsageLabel } from '@/lib/subscription';
 import type { ChatMessage } from '@/types/assistant';
+import { formatBrasiliaTime } from '@/utils/format';
 
 type Icon = ComponentType<{ size?: number; color?: string }>;
+
+/** Folga depois do horário de liberação, para a API já ter virado o dia ao recarregar os limites. */
+const UNBLOCK_MARGIN_MS = 2000;
 
 type Suggestion = {
   title: string;
@@ -101,6 +113,30 @@ export default function AssistantScreen() {
   const [sending, setSending] = useState(false);
   const [startingNew, setStartingNew] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const { limits, reloadLimits, showOffer } = usePlan();
+  // 429 `CHAT_RATE_LIMIT` (Premium): envio bloqueado até `retryAt` (UTC).
+  const [rateLimitedUntil, setRateLimitedUntil] = useState<string>();
+
+  const chat = limits?.chat;
+  // Free sem mensagens no mês: o envio só volta com o Premium (ou no próximo mês).
+  const monthExhausted = chat?.period === 'month' && chat.remaining <= 0;
+  // Premium sem mensagens hoje: volta à meia-noite de Brasília (`resetsAt`).
+  const dayExhausted = chat?.period === 'day' && chat.remaining <= 0;
+  const blockedUntil = rateLimitedUntil ?? (dayExhausted ? chat?.resetsAt : undefined);
+  const blocked = monthExhausted || !!blockedUntil;
+  const monthExhaustedMessage = chat ? chatMonthExhaustedMessage(chat) : '';
+
+  // Libera o envio quando passa o `retryAt` (429) ou o `resetsAt` (fim das 30 do dia) e atualiza
+  // o contador; sem isso, o Premium ficava bloqueado até reabrir o app.
+  useEffect(() => {
+    if (!blockedUntil) return;
+    const wait = Math.max(0, new Date(blockedUntil).getTime() - Date.now()) + UNBLOCK_MARGIN_MS;
+    const timer = setTimeout(() => {
+      setRateLimitedUntil(undefined);
+      reloadLimits();
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [blockedUntil, reloadLimits]);
 
   useEffect(() => {
     getSession().then((session) => {
@@ -118,7 +154,7 @@ export default function AssistantScreen() {
       setMessages((current) => [...page.messages, ...current.filter((message) => message.id < 0)]);
       setHasMore(page.hasMore);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       setHistoryError('Não foi possível carregar a conversa anterior.');
     } finally {
       setLoadingHistory(false);
@@ -139,7 +175,7 @@ export default function AssistantScreen() {
       setMessages((current) => [...page.messages, ...current]);
       setHasMore(page.hasMore);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert('Não foi possível carregar', chatErrorMessage(err));
     } finally {
       setLoadingOlder(false);
@@ -166,7 +202,7 @@ export default function AssistantScreen() {
       setHasMore(false);
       setHistoryError(undefined);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert('Não foi possível começar uma nova conversa', chatErrorMessage(err));
     } finally {
       setStartingNew(false);
@@ -175,7 +211,11 @@ export default function AssistantScreen() {
 
   async function ask(text: string, existingId?: number) {
     const question = text.trim();
-    if (!question || sending) return;
+    if (!question || sending || !!blockedUntil) return;
+    if (monthExhausted) {
+      showOffer(monthExhaustedMessage);
+      return;
+    }
 
     const id = existingId ?? nextLocalId.current--;
     scrollToEndOnChange.current = true;
@@ -197,7 +237,14 @@ export default function AssistantScreen() {
         { id: answer.id, role: 'assistant', text: answer.message },
       ]);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      // Limite do Free: a oferta já foi aberta; a pergunta não foi enviada e volta ao campo.
+      if (err instanceof PremiumOfferShownError) {
+        setMessages((current) => current.filter((message) => message.id !== id));
+        if (existingId === undefined) setInput(question);
+        return;
+      }
+      if (err instanceof HandledActionError) return;
+      if (isChatRateLimitError(err) && err.retryAt) setRateLimitedUntil(err.retryAt);
       setMessages((current) =>
         current.map((message) =>
           message.id === id ? { ...message, error: chatErrorMessage(err) } : message,
@@ -205,6 +252,8 @@ export default function AssistantScreen() {
       );
     } finally {
       setSending(false);
+      // O contador do plano muda a cada envio (inclusive os recusados).
+      reloadLimits();
     }
   }
 
@@ -231,7 +280,7 @@ export default function AssistantScreen() {
     router.push({ pathname: '/goals', params: { tab: 'limits' } });
   }
 
-  const canSend = !!input.trim() && !sending && !startingNew;
+  const canSend = !!input.trim() && !sending && !startingNew && !blocked;
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -376,6 +425,26 @@ export default function AssistantScreen() {
             </AssistantBubble>
           )}
         </ScrollView>
+
+        {monthExhausted ? (
+          <View style={styles.limitBox} accessibilityLiveRegion="polite">
+            <IconCrown size={20} color={colors.primary} />
+            <Text style={styles.limitText}>{monthExhaustedMessage}</Text>
+            <Pressable
+              onPress={() => router.push('/subscription')}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <Text style={styles.retry}>Assinar</Text>
+            </Pressable>
+          </View>
+        ) : blockedUntil ? (
+          <Text style={styles.usage} accessibilityLiveRegion="polite">
+            Disponível novamente às {formatBrasiliaTime(blockedUntil)}
+          </Text>
+        ) : (
+          chat && <Text style={styles.usage}>{chatUsageLabel(chat)}</Text>
+        )}
 
         <View style={styles.inputBar}>
           <TextInput
@@ -678,6 +747,31 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 14,
     color: colors.textSecondary,
+  },
+  usage: {
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 6,
+  },
+  limitBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 16,
+    backgroundColor: colors.beige,
+  },
+  limitText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: colors.textPrimary,
   },
   inputBar: {
     flexDirection: 'row',

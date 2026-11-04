@@ -6,7 +6,7 @@ import { DateField } from '@/components/DateField';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { ApiError } from '@/lib/api';
 import { registerSavingsMovement } from '@/lib/savings';
 import { SavingsMovementType } from '@/types/savings';
@@ -80,7 +80,7 @@ function MovementForm({
       );
       onDone();
     } catch (error) {
-      if (error instanceof SessionEndedError) return;
+      if (error instanceof HandledActionError) return;
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );

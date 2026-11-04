@@ -1,8 +1,10 @@
 import { CATEGORY_COLORS } from '@/constants/colors';
-import { apiGet } from '@/lib/api';
+import { apiGet, isPlanLimitError } from '@/lib/api';
+import { isHistoryLocked } from '@/lib/subscription';
 import { fetchMonthlySummary } from '@/lib/transactions';
 import type { ExpenseCategorySummary } from '@/types/dashboard';
-import { lastPeriods } from '@/utils/period';
+import type { PlanLimits } from '@/types/user';
+import { lastPeriods, samePeriod } from '@/utils/period';
 import type { MonthPeriod } from '@/utils/period';
 
 /** Meses exibidos em "Evolução mensal", terminando no mês selecionado. */
@@ -27,6 +29,8 @@ export type ReportData = {
   categories: ReportCategory[];
   /** Total de despesas de cada mês (monthly-summary), do mais antigo ao selecionado. */
   evolution: { period: MonthPeriod; totalExpense: number }[];
+  /** Algum mês da evolução ficou de fora por estar antes do histórico do plano gratuito. */
+  historyLocked: boolean;
 };
 
 /**
@@ -58,8 +62,39 @@ export function resolveChartColors(items: ExpenseCategorySummary[]): ReportCateg
   });
 }
 
-/** Despesas do mês por categoria e totais de despesa dos últimos meses, direto da API. */
-export async function getReport(token: string, period: MonthPeriod): Promise<ReportData> {
+/**
+ * Total de um mês da evolução; `null` quando o mês está antes do histórico do plano gratuito
+ * (403 `PLAN_LIMIT_REACHED`), para os meses permitidos continuarem aparecendo.
+ */
+async function loadEvolutionMonth(
+  token: string,
+  month: MonthPeriod,
+  selected: MonthPeriod,
+  limits: PlanLimits | undefined,
+  now: Date,
+) {
+  // Mês da evolução que o plano já sabe que está bloqueado: nem pede à API. O mês escolhido
+  // sempre é pedido, para o 403 dele chegar à tela (cadeado).
+  if (!samePeriod(month, selected) && isHistoryLocked(limits, month, now)) return null;
+  try {
+    return await fetchMonthlySummary(token, new Date(month.year, month.month - 1, 1));
+  } catch (error) {
+    if (isPlanLimitError(error)) return null;
+    throw error;
+  }
+}
+
+/**
+ * Despesas do mês por categoria e totais de despesa dos últimos meses, direto da API. O mês
+ * escolhido fora do histórico do plano propaga o 403 (a tela mostra o cadeado). Com `limits`, os
+ * meses da evolução antes do histórico do plano são pulados sem chamar a API.
+ */
+export async function getReport(
+  token: string,
+  period: MonthPeriod,
+  limits?: PlanLimits,
+  now: Date = new Date(),
+): Promise<ReportData> {
   const months = lastPeriods(period, EVOLUTION_MONTHS);
 
   const [categories, ...summaries] = await Promise.all([
@@ -67,16 +102,19 @@ export async function getReport(token: string, period: MonthPeriod): Promise<Rep
       year: period.year,
       month: period.month,
     }),
-    ...months.map((month) => fetchMonthlySummary(token, new Date(month.year, month.month - 1, 1))),
+    ...months.map((month) => loadEvolutionMonth(token, month, period, limits, now)),
   ]);
+
+  const evolution = months.flatMap((month, index) => {
+    const summary = summaries[index];
+    return summary ? [{ period: month, totalExpense: summary.totalExpense }] : [];
+  });
 
   return {
     period,
-    totalExpense: summaries[summaries.length - 1].totalExpense,
+    totalExpense: summaries[summaries.length - 1]?.totalExpense ?? 0,
     categories: resolveChartColors(categories ?? []),
-    evolution: months.map((month, index) => ({
-      period: month,
-      totalExpense: summaries[index].totalExpense,
-    })),
+    evolution,
+    historyLocked: evolution.length < months.length,
   };
 }

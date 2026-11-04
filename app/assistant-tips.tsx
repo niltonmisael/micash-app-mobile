@@ -7,12 +7,15 @@ import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { PremiumLockedCard } from '@/components/PremiumLockedCard';
 import { RichText } from '@/components/RichText';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { Skeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
+import { PREMIUM_OFFERS } from '@/constants/plans';
 import { fonts } from '@/constants/typography';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
+import { usePlan } from '@/hooks/usePlan';
 import { getInsights } from '@/lib/assistant';
 import { InsightType } from '@/types/assistant';
 import type { FinancialInsight } from '@/types/assistant';
@@ -41,10 +44,16 @@ const INSIGHT_APPEARANCE: Record<InsightType, { icon: Icon; color: string; backg
 /** Os insights são sempre do mês atual (data local do aparelho). */
 const fetchInsights = (token: string) => getInsights(token, currentPeriod());
 
-/** Dicas do Mi: regras calculadas pela API + análise em texto gerada pela IA. */
+/**
+ * Dicas do Mi: regras calculadas pela API + análise em texto gerada pela IA. No plano gratuito a
+ * API manda uma prévia (um insight, sem a análise); os demais aparecem bloqueados.
+ */
 export default function AssistantTipsScreen() {
-  const { data, loading, refreshing, error, refresh, retry } = useAuthenticatedQuery(fetchInsights);
+  const { data, locked, loading, refreshing, error, refresh, retry } =
+    useAuthenticatedQuery(fetchInsights);
+  const { showOffer } = usePlan();
   const monthLabel = monthYearLabel(currentPeriod()).toLowerCase();
+  const openOffer = () => showOffer(PREMIUM_OFFERS.insights, 'Insights completos');
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -65,7 +74,13 @@ export default function AssistantTipsScreen() {
           <ErrorNotice message={error} onRetry={retry} retrying={loading || refreshing} />
         )}
 
-        {!data ? (
+        {locked ? (
+          <PremiumLockedCard
+            title="Insights deste mês"
+            message={locked}
+            onPress={() => showOffer(locked)}
+          />
+        ) : !data ? (
           loading ? (
             <>
               <View style={styles.analysisCard}>
@@ -87,21 +102,23 @@ export default function AssistantTipsScreen() {
           ) : null
         ) : (
           <>
-            <View style={styles.analysisCard}>
-              <View style={styles.analysisHeader}>
-                <IconSparkles size={18} color={colors.primary} />
-                <Text style={styles.analysisLabel}>
-                  {data.artificialInsight?.title || 'Análise da MI'}
-                </Text>
+            {!data.isPreview && (
+              <View style={styles.analysisCard}>
+                <View style={styles.analysisHeader}>
+                  <IconSparkles size={18} color={colors.primary} />
+                  <Text style={styles.analysisLabel}>
+                    {data.artificialInsight?.title || 'Análise da MI'}
+                  </Text>
+                </View>
+                {data.artificialInsight ? (
+                  <RichText text={data.artificialInsight.message} style={styles.analysisText} />
+                ) : (
+                  <Text style={styles.analysisText}>
+                    A análise da MI está indisponível no momento. Tente novamente mais tarde.
+                  </Text>
+                )}
               </View>
-              {data.artificialInsight ? (
-                <RichText text={data.artificialInsight.message} style={styles.analysisText} />
-              ) : (
-                <Text style={styles.analysisText}>
-                  A análise da MI está indisponível no momento. Tente novamente mais tarde.
-                </Text>
-              )}
-            </View>
+            )}
 
             {data.insights.length === 0 ? (
               <View style={styles.emptyCard}>
@@ -113,6 +130,17 @@ export default function AssistantTipsScreen() {
             ) : (
               data.insights.map((insight, index) => <InsightCard key={index} insight={insight} />)
             )}
+
+            {data.isPreview &&
+              Array.from({ length: data.lockedInsightsCount }, (_, index) => (
+                <PremiumLockedCard
+                  key={index}
+                  // O primeiro bloqueado é a análise da IA, que a prévia nunca traz.
+                  title={index === 0 ? 'Análise da MI' : 'Insight do Premium'}
+                  message={index === 0 ? PREMIUM_OFFERS.insights : undefined}
+                  onPress={openOffer}
+                />
+              ))}
 
             <Text style={styles.footer}>
               Dicas geradas a partir dos seus lançamentos de {monthLabel}.

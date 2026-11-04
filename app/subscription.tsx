@@ -1,53 +1,142 @@
+import IconCheck from '@tabler/icons-react-native/IconCheck';
 import IconCrown from '@tabler/icons-react-native/IconCrown';
-import { useState } from 'react';
-import { Alert, Linking, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Alert,
+  Linking,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { PrimaryButton } from '@/components/PrimaryButton';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { SegmentedControl } from '@/components/SegmentedControl';
 import { Skeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
+import { FREE_BENEFITS, PREMIUM_BENEFITS } from '@/constants/plans';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
+import { usePlan } from '@/hooks/usePlan';
 import { ApiError } from '@/lib/api';
 import {
+  annualDiscountPercent,
+  cancelSubscription,
   createCheckout,
   getSubscriptionData,
   isFreePlan,
-  subscriptionStatusLabel,
+  plansByCycle,
+  premiumAccessUntil,
+  reactivateSubscription,
 } from '@/lib/subscription';
+import type { BillingCycle } from '@/lib/subscription';
 import { SubscriptionStatus } from '@/types/user';
 import type { Plan } from '@/types/user';
 import { formatCurrency, formatDate, toDateKey } from '@/utils/format';
+
+const UNEXPECTED_ERROR = 'Ocorreu um erro inesperado. Tente novamente.';
+
+const CYCLE_SUFFIX: Record<BillingCycle, string> = { monthly: '/mês', annual: '/ano' };
+
+type PendingAction = 'checkout' | 'cancel' | 'reactivate';
+
+/** Data UTC da API como "12 dez 2026". */
+function formatApiDate(value: string): string {
+  return formatDate(toDateKey(value));
+}
 
 export default function SubscriptionScreen() {
   const runAuthenticated = useAuthenticatedAction();
   const { data, loading, refreshing, error, refresh, retry } =
     useAuthenticatedQuery(getSubscriptionData);
-  const [checkoutPlanId, setCheckoutPlanId] = useState<number>();
+  const { reloadLimits } = usePlan();
+  const [cycle, setCycle] = useState<BillingCycle>('monthly');
+  const [pending, setPending] = useState<PendingAction>();
+
+  // Ao sair da tela (ex.: depois de assinar), os limites são relidos e os cadeados somem.
+  useEffect(() => () => void reloadLimits(), [reloadLimits]);
 
   const current = data?.current;
-  const free = !!current && isFreePlan(current);
-  // A API recusa um novo checkout enquanto houver assinatura ativa.
-  const hasActive = current?.status === SubscriptionStatus.Active && !free;
+  const plans = plansByCycle(data?.plans ?? []);
+  // `current` só traz assinatura ativa ou pendente (checkout aguardando o pagamento).
+  const premium =
+    current && !isFreePlan(current) && current.status === SubscriptionStatus.Active
+      ? current
+      : undefined;
+  const paymentPending =
+    !!current && !isFreePlan(current) && current.status === SubscriptionStatus.Pending;
+
+  const cycles = (['monthly', 'annual'] as const).filter((key) => plans[key]);
+  const selectedCycle = plans[cycle] ? cycle : cycles[0];
+  const selectedPlan = selectedCycle ? plans[selectedCycle] : undefined;
+  const discount =
+    plans.monthly && plans.annual ? annualDiscountPercent(plans.monthly, plans.annual) : 0;
+  const accessUntil = premium ? premiumAccessUntil(premium) : null;
+  const accessUntilLabel = accessUntil ? formatApiDate(accessUntil) : 'o fim do período pago';
+  const premiumCycle = (Object.keys(plans) as BillingCycle[]).find(
+    (key) => plans[key]?.id === premium?.planId,
+  );
+
+  async function run(action: PendingAction, task: (token: string) => Promise<void>) {
+    setPending(action);
+    try {
+      await runAuthenticated(task);
+      return true;
+    } catch (err) {
+      if (!(err instanceof HandledActionError)) {
+        Alert.alert(
+          action === 'checkout'
+            ? 'Não foi possível iniciar a assinatura'
+            : 'Não foi possível atualizar a assinatura',
+          err instanceof ApiError ? err.message : UNEXPECTED_ERROR,
+        );
+      }
+      return false;
+    } finally {
+      setPending(undefined);
+    }
+  }
 
   async function subscribe(plan: Plan) {
-    setCheckoutPlanId(plan.id);
-    try {
-      const url = await runAuthenticated((token) => createCheckout(token, plan.id));
+    await run('checkout', async (token) => {
+      const url = await createCheckout(token, plan.id);
       // O pagamento acontece no Pagar.me; a assinatura só muda depois da confirmação do
       // pagamento no backend (webhook). Ao voltar ao app, a tela recarrega o status.
       await Linking.openURL(url);
-    } catch (err) {
-      if (err instanceof SessionEndedError) return;
-      Alert.alert(
-        'Não foi possível iniciar a assinatura',
-        err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
-      );
-    } finally {
-      setCheckoutPlanId(undefined);
+    });
+  }
+
+  async function afterChange() {
+    await Promise.all([refresh(), reloadLimits()]);
+  }
+
+  function confirmCancel() {
+    Alert.alert(
+      'Cancelar assinatura?',
+      `Você continua com o Premium até ${accessUntilLabel}. Depois disso, sua conta volta para o plano Gratuito.`,
+      [
+        { text: 'Manter Premium', style: 'cancel' },
+        {
+          text: 'Cancelar assinatura',
+          style: 'destructive',
+          onPress: async () => {
+            if (await run('cancel', cancelSubscription)) await afterChange();
+          },
+        },
+      ],
+    );
+  }
+
+  async function reactivate() {
+    if (await run('reactivate', reactivateSubscription)) {
+      await afterChange();
+      Alert.alert('Assinatura reativada', 'Seu Premium continua renovando normalmente.');
     }
   }
 
@@ -66,7 +155,7 @@ export default function SubscriptionScreen() {
         }
       >
         <Text style={styles.title} accessibilityRole="header">
-          Escolha seu plano
+          {premium ? 'Seu plano' : 'Escolha seu plano'}
         </Text>
 
         {!!error && (
@@ -76,79 +165,154 @@ export default function SubscriptionScreen() {
         {!data ? (
           loading && (
             <View style={styles.loading}>
-              <Skeleton width={320} height={110} />
-              <Skeleton width={320} height={110} />
+              <Skeleton width={320} height={48} />
+              <Skeleton width={320} height={180} />
+              <Skeleton width={320} height={220} />
             </View>
           )
-        ) : (
+        ) : premium ? (
           <>
-            <View style={[styles.card, free && styles.cardCurrent]}>
-              <Text style={styles.planName}>Gratuito</Text>
-              <Text style={styles.price}>{formatCurrency(0)}</Text>
-              {free ? (
+            <View style={[styles.card, styles.cardPremium]}>
+              <View style={styles.planHeader}>
+                <Text style={styles.planName}>{premium.planName}</Text>
+                <IconCrown size={22} color={colors.primary} />
+              </View>
+              <Price value={premium.price} suffix={premiumCycle && CYCLE_SUFFIX[premiumCycle]} />
+              <BenefitList items={PREMIUM_BENEFITS} />
+
+              {premium.cancelAtPeriodEnd ? (
+                <View style={styles.notice}>
+                  <Text style={styles.noticeTitle}>Cancelamento agendado</Text>
+                  <Text style={styles.noticeText}>
+                    Seu Premium continua até {accessUntilLabel}. Depois disso, sua conta volta para
+                    o plano Gratuito.
+                  </Text>
+                </View>
+              ) : (
+                premium.nextBillingDate && (
+                  <Text style={styles.detail}>
+                    Próxima cobrança em {formatApiDate(premium.nextBillingDate)}
+                  </Text>
+                )
+              )}
+
+              {premium.cancelAtPeriodEnd ? (
+                <PrimaryButton
+                  title="Reativar assinatura"
+                  onPress={reactivate}
+                  loading={pending === 'reactivate'}
+                  disabled={pending !== undefined}
+                  style={styles.button}
+                />
+              ) : (
                 <View style={styles.currentBadge}>
                   <Text style={styles.currentBadgeText}>Plano atual</Text>
                 </View>
-              ) : null}
+              )}
             </View>
 
-            {!free && current && (
-              <View style={[styles.card, styles.cardPremium]}>
-                <View style={styles.planHeader}>
-                  <Text style={styles.planName}>{current.planName}</Text>
-                  <IconCrown size={20} color={colors.primary} />
-                </View>
-                <Text style={styles.price}>{formatCurrency(current.price)}</Text>
-                <Text style={styles.status}>Status: {subscriptionStatusLabel(current)}</Text>
-                {current.nextBillingDate && !current.cancelAtPeriodEnd && (
-                  <Text style={styles.detail}>
-                    Próxima cobrança: {formatDate(toDateKey(current.nextBillingDate))}
-                  </Text>
-                )}
-                {current.cancelAtPeriodEnd && current.endsAt && (
-                  <Text style={styles.detail}>
-                    Cancelada; acesso até {formatDate(toDateKey(current.endsAt))}
-                  </Text>
-                )}
-                <View style={styles.currentBadge}>
-                  <Text style={styles.currentBadgeText}>Plano atual</Text>
-                </View>
+            {!premium.cancelAtPeriodEnd && (
+              <Pressable
+                style={styles.cancelLink}
+                onPress={confirmCancel}
+                disabled={pending !== undefined}
+                hitSlop={8}
+                accessibilityRole="button"
+              >
+                <Text style={styles.cancelLinkText}>
+                  {pending === 'cancel' ? 'Cancelando…' : 'Cancelar assinatura'}
+                </Text>
+              </Pressable>
+            )}
+          </>
+        ) : (
+          <>
+            {cycles.length > 1 && (
+              <SegmentedControl
+                options={cycles.map((key) => ({
+                  key,
+                  label:
+                    key === 'monthly' ? 'Mensal' : discount ? `Anual (${discount}% OFF)` : 'Anual',
+                }))}
+                value={selectedCycle!}
+                onChange={setCycle}
+                style={styles.cycles}
+              />
+            )}
+
+            {paymentPending && (
+              <View style={[styles.notice, styles.noticeTop]}>
+                <Text style={styles.noticeTitle}>Pagamento pendente</Text>
+                <Text style={styles.noticeText}>
+                  Assim que o Pagar.me confirmar o pagamento, seu Premium é ativado. Puxe a tela
+                  para atualizar.
+                </Text>
               </View>
             )}
 
-            {data.plans
-              .filter((plan) => plan.id !== current?.planId)
-              .map((plan) => (
-                <View key={plan.id} style={[styles.card, styles.cardPremium]}>
-                  <View style={styles.planHeader}>
-                    <Text style={styles.planName}>{plan.name}</Text>
-                    <IconCrown size={20} color={colors.primary} />
-                  </View>
-                  <Text style={styles.price}>{formatCurrency(plan.price)}</Text>
-                  <PrimaryButton
-                    title={hasActive ? 'Você já tem uma assinatura ativa' : 'Assinar agora'}
-                    onPress={() => subscribe(plan)}
-                    loading={checkoutPlanId === plan.id}
-                    disabled={hasActive || checkoutPlanId !== undefined}
-                    style={styles.subscribeButton}
-                  />
-                </View>
-              ))}
+            <View style={styles.card}>
+              <Text style={styles.planName}>Gratuito</Text>
+              <Price value={0} suffix="/mês" />
+              <BenefitList items={FREE_BENEFITS} />
+              <View style={styles.currentBadge}>
+                <Text style={styles.currentBadgeText}>Plano atual</Text>
+              </View>
+            </View>
 
-            {data.plans.length === 0 && (
-              <Text style={styles.empty}>Nenhum plano pago disponível no momento.</Text>
-            )}
+            {/* O Premium aparece mesmo sem plano na API: os benefícios continuam visíveis. */}
+            <View style={[styles.card, styles.cardPremium]}>
+              <View style={styles.planHeader}>
+                <Text style={styles.planName}>Premium</Text>
+                <IconCrown size={22} color={colors.primary} />
+              </View>
+              {selectedPlan && (
+                <Price value={selectedPlan.price} suffix={CYCLE_SUFFIX[selectedCycle!]} />
+              )}
+              <BenefitList items={PREMIUM_BENEFITS} />
+              <PrimaryButton
+                title={selectedPlan ? 'Assinar agora' : 'Assinatura indisponível no momento'}
+                onPress={() => selectedPlan && subscribe(selectedPlan)}
+                loading={pending === 'checkout'}
+                disabled={!selectedPlan || pending !== undefined}
+                style={styles.button}
+              />
+            </View>
 
-            {data.plans.length > 0 && (
-              <Text style={styles.footnote}>
-                O pagamento é feito no Pagar.me. Sua assinatura é ativada depois da confirmação do
-                pagamento.
-              </Text>
+            {!!selectedPlan && (
+              <>
+                <Text style={styles.footnote}>Cancele quando quiser.</Text>
+                <Text style={styles.footnote}>
+                  O pagamento é feito no Pagar.me. Sua assinatura é ativada depois da confirmação do
+                  pagamento.
+                </Text>
+              </>
             )}
           </>
         )}
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function Price({ value, suffix }: { value: number; suffix?: string }) {
+  return (
+    <Text style={styles.price}>
+      {formatCurrency(value)}
+      {!!suffix && <Text style={styles.priceSuffix}> {suffix}</Text>}
+    </Text>
+  );
+}
+
+function BenefitList({ items }: { items: string[] }) {
+  return (
+    <View style={styles.benefits}>
+      {items.map((item) => (
+        <View key={item} style={styles.benefit}>
+          <IconCheck size={16} color={colors.primary} />
+          <Text style={styles.benefitText}>{item}</Text>
+        </View>
+      ))}
+    </View>
   );
 }
 
@@ -172,6 +336,9 @@ const styles = StyleSheet.create({
   loading: {
     gap: 14,
   },
+  cycles: {
+    marginBottom: 14,
+  },
   card: {
     backgroundColor: colors.white,
     borderRadius: 20,
@@ -180,11 +347,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.white,
   },
-  cardCurrent: {
-    borderColor: colors.border,
-  },
   cardPremium: {
-    borderColor: colors.primarySoft,
+    borderColor: colors.primary,
   },
   planHeader: {
     flexDirection: 'row',
@@ -202,17 +366,52 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginTop: 4,
   },
-  status: {
-    fontFamily: fonts.medium,
+  priceSuffix: {
+    fontFamily: fonts.regular,
     fontSize: 14,
-    color: colors.textPrimary,
-    marginTop: 8,
+    color: colors.textSecondary,
   },
   detail: {
     fontFamily: fonts.regular,
     fontSize: 13,
     color: colors.textSecondary,
-    marginTop: 2,
+    marginTop: 12,
+  },
+  benefits: {
+    gap: 8,
+    marginTop: 12,
+  },
+  benefit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  benefitText: {
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  notice: {
+    backgroundColor: colors.beige,
+    borderRadius: 14,
+    padding: 12,
+    marginTop: 14,
+    gap: 2,
+  },
+  noticeTop: {
+    marginTop: 0,
+    marginBottom: 14,
+  },
+  noticeTitle: {
+    fontFamily: fonts.semiBold,
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  noticeText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
   },
   currentBadge: {
     alignItems: 'center',
@@ -227,20 +426,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textSecondary,
   },
-  subscribeButton: {
+  button: {
     marginTop: 14,
   },
-  empty: {
-    fontFamily: fonts.regular,
+  cancelLink: {
+    alignSelf: 'center',
+    paddingVertical: 8,
+  },
+  cancelLinkText: {
+    fontFamily: fonts.medium,
     fontSize: 14,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    paddingVertical: 12,
+    color: colors.expense,
   },
   footnote: {
     fontFamily: fonts.regular,
     fontSize: 12,
     color: colors.textSecondary,
     textAlign: 'center',
+    marginBottom: 4,
   },
 });

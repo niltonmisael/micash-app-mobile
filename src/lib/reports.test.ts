@@ -1,6 +1,7 @@
 import { EVOLUTION_MONTHS, getReport, resolveChartColors } from './reports';
 import { CATEGORY_COLORS } from '@/constants/colors';
 import type { ExpenseCategorySummary } from '@/types/dashboard';
+import type { PlanLimits } from '@/types/user';
 
 const item = (id: number, color: string, amount = 10): ExpenseCategorySummary => ({
   categoryId: id,
@@ -90,5 +91,84 @@ describe('getReport', () => {
     const data = await getReport('token', { year: 2026, month: 10 });
     expect(data.categories).toEqual([]);
     expect(data.totalExpense).toBe(0);
+  });
+});
+
+describe('getReport no plano gratuito', () => {
+  const fetchMock = jest.fn();
+
+  beforeEach(() => {
+    process.env.EXPO_PUBLIC_API_URL = 'http://api.test';
+    fetchMock.mockReset();
+    globalThis.fetch = fetchMock;
+  });
+
+  const ok = (json: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => json,
+    text: async () => JSON.stringify(json),
+  });
+  const planLimit = {
+    ok: false,
+    status: 403,
+    json: async () => ({
+      errorMessages: ['Histórico do Premium.'],
+      errorCode: 'PLAN_LIMIT_REACHED',
+    }),
+  };
+
+  it('deixa de fora da evolução os meses antes do histórico do plano', async () => {
+    // Meses de maio a agosto liberados; março e abril recusados com 403.
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('expenses-by-category')) return ok([]);
+      const month = Number(new URL(url).searchParams.get('month'));
+      if (month < 5) return planLimit;
+      return ok({ totalIncome: 0, totalExpense: month * 100, balance: 0, year: 2026, month });
+    });
+
+    const data = await getReport('t', { year: 2026, month: 8 });
+
+    expect(data.evolution.map((item) => item.period.month)).toEqual([5, 6, 7, 8]);
+    expect(data.historyLocked).toBe(true);
+    expect(data.totalExpense).toBe(800);
+  });
+
+  it('com os limites do plano, nem pede à API os meses da evolução já bloqueados', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.includes('expenses-by-category')) return ok([]);
+      const month = Number(new URL(url).searchParams.get('month'));
+      return ok({ totalIncome: 0, totalExpense: month * 100, balance: 0, year: 2026, month });
+    });
+    const free = { historyMonths: 3 } as PlanLimits;
+
+    // Hoje = agosto: histórico de maio a agosto; março e abril ficam de fora sem chamada.
+    const data = await getReport('t', { year: 2026, month: 8 }, free, new Date(2026, 7, 15));
+
+    const requestedMonths = fetchMock.mock.calls
+      .map(([url]: [string]) => url)
+      .filter((url) => url.includes('monthly-summary'))
+      .map((url) => Number(new URL(url).searchParams.get('month')));
+    expect(requestedMonths.sort((a, b) => a - b)).toEqual([5, 6, 7, 8]);
+    expect(data.evolution.map((item) => item.period.month)).toEqual([5, 6, 7, 8]);
+    expect(data.historyLocked).toBe(true);
+  });
+
+  it('o mês escolhido é sempre pedido, mesmo bloqueado, para o 403 chegar à tela', async () => {
+    fetchMock.mockResolvedValue(planLimit);
+    const free = { historyMonths: 3 } as PlanLimits;
+
+    await expect(
+      getReport('t', { year: 2025, month: 1 }, free, new Date(2026, 7, 15)),
+    ).rejects.toMatchObject({ status: 403, code: 'PLAN_LIMIT_REACHED' });
+  });
+
+  it('propaga o 403 quando o próprio mês escolhido está fora do histórico', async () => {
+    fetchMock.mockResolvedValue(planLimit);
+
+    await expect(getReport('t', { year: 2025, month: 1 })).rejects.toMatchObject({
+      status: 403,
+      code: 'PLAN_LIMIT_REACHED',
+    });
   });
 });

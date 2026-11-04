@@ -1,14 +1,16 @@
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert } from 'react-native';
 
-import { ApiError } from '@/lib/api';
+import { usePlan } from '@/hooks/usePlan';
+import { ApiError, isPlanLimitError } from '@/lib/api';
 import { SessionUnavailableError, clearSession, getSession, withSession } from '@/lib/auth';
 
 type LoadResult<T> =
   | { kind: 'ok'; firstName: string; data: T }
   | { kind: 'no-session' }
   | { kind: 'expired' }
+  | { kind: 'plan-limit'; firstName: string; message: string }
   | { kind: 'error'; firstName: string; message: string };
 
 async function runQuery<T>(fetcher: (token: string) => Promise<T>): Promise<LoadResult<T>> {
@@ -23,6 +25,8 @@ async function runQuery<T>(fetcher: (token: string) => Promise<T>): Promise<Load
     if (err instanceof SessionUnavailableError) {
       return err.reason === 'expired' ? { kind: 'expired' } : { kind: 'no-session' };
     }
+    // Limite do plano (ex.: mês fora do histórico do Free) não é erro: a tela mostra o cadeado.
+    if (isPlanLimitError(err)) return { kind: 'plan-limit', firstName, message: err.message };
     // Falha de rede tem mensagem própria; outros erros da API ficam com uma mensagem genérica.
     const message =
       err instanceof ApiError && err.status === undefined
@@ -45,6 +49,8 @@ export function useAuthenticatedQuery<T>(fetcher: (token: string) => Promise<T>)
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string>();
+  const [locked, setLocked] = useState<string>();
+  const { limits } = usePlan();
 
   const signOut = useCallback(async () => {
     await clearSession();
@@ -60,6 +66,14 @@ export function useAuthenticatedQuery<T>(fetcher: (token: string) => Promise<T>)
           setFirstName(result.firstName);
           setData(result.data);
           setError(undefined);
+          setLocked(undefined);
+          return;
+        case 'plan-limit':
+          // Sem dados deste pedido: a tela mostra a oferta no lugar do conteúdo.
+          setFirstName(result.firstName);
+          setData(undefined);
+          setError(undefined);
+          setLocked(result.message);
           return;
         case 'error':
           // Mantém os dados já carregados (se houver) e mostra o aviso com "Tentar novamente".
@@ -100,12 +114,26 @@ export function useAuthenticatedQuery<T>(fetcher: (token: string) => Promise<T>)
     [fetcher, applyResult],
   );
 
+  // Assinou (ou perdeu o Premium) com a tela aberta: recarrega para os cadeados mudarem na hora.
+  // A primeira resposta dos limites não conta: a tela já carregou com o que a API permite.
+  const isPremium = limits?.isPremium;
+  const previousPremium = useRef(isPremium);
+  useEffect(() => {
+    const before = previousPremium.current;
+    previousPremium.current = isPremium;
+    if (before !== undefined && isPremium !== undefined && before !== isPremium) {
+      runQuery(fetcher).then(applyResult);
+    }
+  }, [isPremium, fetcher, applyResult]);
+
   return {
     data,
     firstName,
     loading,
     refreshing,
     error,
+    /** Mensagem da API quando o plano não permite estes dados (403 de limite); sem `data`. */
+    locked,
     /** Puxar para atualizar. */
     refresh: () => reload('refresh'),
     /** "Tentar novamente" após um erro. */

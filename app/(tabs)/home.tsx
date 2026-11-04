@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { GoalLimitRow } from '@/components/GoalLimitRow';
 import { LineChart } from '@/components/LineChart';
+import { MonthForecastCard } from '@/components/MonthForecastCard';
 import { Skeleton, TransactionRowSkeleton } from '@/components/Skeleton';
 import { TransactionRow } from '@/components/TransactionRow';
 import { colors } from '@/constants/colors';
@@ -148,6 +149,13 @@ export default function DashboardScreen() {
             )}
           </View>
         </View>
+
+        <MonthForecastCard
+          forecast={showSkeleton ? undefined : (data?.forecast ?? null)}
+          hideBalance={balanceHidden}
+          hiddenValue={HIDDEN_VALUE}
+          onUnlock={() => router.push('/subscription')}
+        />
 
         <Text style={styles.sectionTitle}>Resumo do mês</Text>
         <View style={styles.chartCard}>

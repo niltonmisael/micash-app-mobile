@@ -5,6 +5,7 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 
 import { colors } from '@/constants/colors';
+import { PlanProvider } from '@/hooks/usePlan';
 import { configureForegroundNotifications } from '@/lib/notifications';
 
 // Antes de qualquer notificação chegar: com o app aberto, ela aparece como banner.
@@ -23,12 +24,14 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-        animation: 'fade',
-        contentStyle: { backgroundColor: colors.cream },
-      }}
-    />
+    <PlanProvider>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: 'fade',
+          contentStyle: { backgroundColor: colors.cream },
+        }}
+      />
+    </PlanProvider>
   );
 }

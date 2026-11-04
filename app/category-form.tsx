@@ -25,7 +25,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import { createCategory, getCategory, updateCategory } from '@/lib/categories';
@@ -132,7 +132,7 @@ function CategoryForm({ category }: { category?: Category }) {
       router.back();
       Alert.alert(category ? 'Categoria atualizada' : 'Categoria criada', data.name);
     } catch (error) {
-      if (error instanceof SessionEndedError) return;
+      if (error instanceof HandledActionError) return;
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );

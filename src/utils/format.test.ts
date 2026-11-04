@@ -1,5 +1,6 @@
 import {
   centsToAmount,
+  formatBrasiliaTime,
   formatCountdown,
   formatCurrency,
   formatDate,
@@ -145,5 +146,17 @@ describe('formatTime', () => {
 
   it('valor inválido vira texto vazio', () => {
     expect(formatTime('ontem')).toBe('');
+  });
+});
+
+describe('formatBrasiliaTime', () => {
+  it('mostra o horário de Brasília (UTC−3), independente do fuso do aparelho', () => {
+    expect(formatBrasiliaTime('2026-12-01T03:00:00Z')).toBe('00:00');
+    expect(formatBrasiliaTime('2026-11-10T17:32:00Z')).toBe('14:32');
+    expect(formatBrasiliaTime('2026-11-10T01:05:00Z')).toBe('22:05');
+  });
+
+  it('devolve vazio para datas inválidas', () => {
+    expect(formatBrasiliaTime('não é data')).toBe('');
   });
 });

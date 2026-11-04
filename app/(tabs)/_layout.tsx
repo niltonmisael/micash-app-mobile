@@ -1,10 +1,11 @@
 import { Tabs, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AddTransactionSheet } from '@/components/AddTransactionSheet';
 import { BottomNav } from '@/components/BottomNav';
 import type { BottomNavItem } from '@/components/BottomNav';
 import { colors } from '@/constants/colors';
+import { usePlan } from '@/hooks/usePlan';
 import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 type TabRoute = 'home' | 'transactions' | 'reports' | 'profile' | 'categories' | 'goals';
@@ -25,6 +26,11 @@ export default function TabsLayout() {
   const [sheetVisible, setSheetVisible] = useState(false);
   // Área autenticada: só aqui o app pede a permissão de notificações e obtém o token.
   usePushNotifications();
+  // Limites do plano: carregados ao entrar na área autenticada (abertura do app ou login).
+  const { reloadLimits } = usePlan();
+  useEffect(() => {
+    reloadLimits();
+  }, [reloadLimits]);
 
   function handleSelect(kind: 'income' | 'expense') {
     setSheetVisible(false);

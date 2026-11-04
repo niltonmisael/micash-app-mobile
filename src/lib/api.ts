@@ -6,6 +6,10 @@ export class ApiError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    /** `errorCode` da API (ex.: `PLAN_LIMIT_REACHED`, `CHAT_RATE_LIMIT`); ausente na maioria. */
+    readonly code?: string,
+    /** Quando a ação volta a ser permitida (DateTime em UTC); ausente quando não se aplica. */
+    readonly retryAt?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -15,7 +19,26 @@ export class ApiError extends Error {
 /** ResponseErrorJson da API. */
 type ErrorBody = {
   errorMessages?: string[];
+  errorCode?: string;
+  retryAt?: string;
 };
+
+/**
+ * Limite do plano gratuito ou recurso Premium: 403 com `PLAN_LIMIT_REACHED`, ou 403 sem código
+ * (bloqueio antigo de assinatura). O app oferece o Premium em vez de mostrar um erro.
+ */
+export function isPlanLimitError(error: unknown): error is ApiError {
+  return (
+    error instanceof ApiError &&
+    error.status === 403 &&
+    (error.code === undefined || error.code === 'PLAN_LIMIT_REACHED')
+  );
+}
+
+/** Limite de mensagens do chat no Premium (429 `CHAT_RATE_LIMIT`), liberado em `retryAt`. */
+export function isChatRateLimitError(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 429 && error.code === 'CHAT_RATE_LIMIT';
+}
 
 type QueryParams = Record<string, string | number>;
 
@@ -73,7 +96,12 @@ async function request(
     const data = (await response.json().catch(() => null)) as ErrorBody | null;
     // A validação da API pode devolver várias mensagens (ex.: cadastro); mostra todas.
     const messages = data?.errorMessages?.filter(Boolean) ?? [];
-    throw new ApiError(messages.length ? messages.join('\n') : UNKNOWN_ERROR, response.status);
+    throw new ApiError(
+      messages.length ? messages.join('\n') : UNKNOWN_ERROR,
+      response.status,
+      data?.errorCode || undefined,
+      data?.retryAt || undefined,
+    );
   }
 
   return response;

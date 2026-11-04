@@ -17,6 +17,8 @@ export const colors = {
   expense: '#C86A52',
   expenseSoft: '#F8E3DD',
   overlay: 'rgba(51, 51, 51, 0.45)',
+  /** Véu sobre conteúdo bloqueado (teaser Premium). */
+  veil: 'rgba(255, 255, 255, 0.7)',
   white: '#FFFFFF',
 } as const;
 

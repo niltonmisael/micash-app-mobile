@@ -45,10 +45,43 @@ export type CurrentSubscription = {
   cancelAtPeriodEnd: boolean;
   nextBillingDate: string | null;
   endsAt: string | null;
+  /** Dia em que o cancelamento agendado acontece (fim do período pago), em UTC. */
+  cancellationScheduledFor?: string | null;
   price: number;
 };
 
 /** ResponseCheckoutJson — POST /api/checkout (link de pagamento do Pagar.me). */
 export type CheckoutResponse = {
   checkoutUrl: string;
+};
+
+/** ResponseChatLimitJson — contador de mensagens do chat com a MI. */
+export type ChatLimit = {
+  /** "month" no Free, "day" no Premium (zera à meia-noite de Brasília). */
+  period: 'month' | 'day';
+  limit: number;
+  used: number;
+  remaining: number;
+  /** Quando o contador zera (DateTime em UTC). */
+  resetsAt: string;
+  /** Limite extra por minuto (Premium); `null` quando não há. */
+  perMinute: number | null;
+};
+
+/**
+ * ResponsePlanLimitsJson — GET /api/subscription/limits. Só assinatura ativa é Premium
+ * (pendente, em atraso ou cancelada contam como Free). `null` = sem limite.
+ */
+export type PlanLimits = {
+  plan: 'Free' | 'Premium';
+  isPremium: boolean;
+  maxFinancialGoalsPerMonth: number | null;
+  maxSavingsGoals: number | null;
+  /** Meses anteriores ao atual visíveis no Dashboard, metas e insights; `null` = todo o histórico. */
+  historyMonths: number | null;
+  fullInsights: boolean;
+  goalWarningAlerts: boolean;
+  canCopyFinancialGoals: boolean;
+  monthForecast: boolean;
+  chat: ChatLimit;
 };

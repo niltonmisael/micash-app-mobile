@@ -28,7 +28,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import { getCategories } from '@/lib/categories';
@@ -213,7 +213,7 @@ function NewGoalForm({
       );
       router.back();
     } catch (error) {
-      if (error instanceof SessionEndedError) return;
+      if (error instanceof HandledActionError) return;
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );
@@ -353,7 +353,7 @@ function EditGoalForm({ goal }: { goal: FinancialGoal }) {
       await runAuthenticated((token) => updateGoal(token, goal.id, centsToAmount(amountCents)));
       router.back();
     } catch (error) {
-      if (error instanceof SessionEndedError) return;
+      if (error instanceof HandledActionError) return;
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );
@@ -489,7 +489,7 @@ function SavingsGoalForm({ goal, kindSelector }: { goal?: SavingsGoal; kindSelec
       );
       router.back();
     } catch (error) {
-      if (error instanceof SessionEndedError) return;
+      if (error instanceof HandledActionError) return;
       setSubmitError(
         error instanceof ApiError ? error.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );

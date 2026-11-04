@@ -3,6 +3,7 @@ import { ApiError } from '@/lib/api';
 import {
   chatErrorMessage,
   getChatHistory,
+  getInsights,
   sendChatMessage,
   startNewConversation,
   toChatMessages,
@@ -103,6 +104,38 @@ describe('assistant', () => {
       );
       expect(chatErrorMessage(new ApiError('Bad Gateway', 502))).toBe(
         'A MI está indisponível no momento. Tente novamente em instantes.',
+      );
+    });
+
+    it('mostra a mensagem da API no limite de mensagens do Premium (429 CHAT_RATE_LIMIT)', () => {
+      expect(
+        chatErrorMessage(
+          new ApiError('Você atingiu o limite de 30 mensagens por dia.', 429, 'CHAT_RATE_LIMIT'),
+        ),
+      ).toBe('Você atingiu o limite de 30 mensagens por dia.');
+    });
+  });
+
+  describe('getInsights', () => {
+    it('traz a prévia do plano gratuito com a quantidade de insights bloqueados', async () => {
+      const insight = { type: 0, typeDescription: 'Warning', title: 'Atenção', message: 'm' };
+      fetchMock.mockResolvedValue(
+        respond(200, {
+          insights: [insight],
+          artificialInsight: null,
+          isPreview: true,
+          lockedInsightsCount: 3,
+        }),
+      );
+
+      await expect(getInsights('t', { year: 2026, month: 11 })).resolves.toEqual({
+        insights: [insight],
+        artificialInsight: null,
+        isPreview: true,
+        lockedInsightsCount: 3,
+      });
+      expect(fetchMock.mock.calls[0][0]).toBe(
+        'http://api.test/api/financialinsights?month=11&year=2026',
       );
     });
   });

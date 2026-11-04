@@ -33,7 +33,7 @@ import { SavingsMovementSheet } from '@/components/SavingsMovementSheet';
 import { Skeleton, TransactionRowSkeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import { deleteSavingsGoal, getSavingsGoal } from '@/lib/savings';
@@ -90,7 +90,7 @@ export default function SavingsGoalScreen() {
       await runAuthenticated((token) => deleteSavingsGoal(token, id));
       router.back();
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert(
         'Não foi possível excluir',
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',

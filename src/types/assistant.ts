@@ -23,11 +23,16 @@ export type ArtificialInsight = {
 
 /**
  * ResponseFinancialInsightsJson — GET /api/financialinsights?month&year.
- * `artificialInsight` é `null` quando a IA falhou (a API ainda devolve as regras fixas).
+ * `artificialInsight` é `null` quando a IA falhou (a API ainda devolve as regras fixas) e na
+ * prévia do plano gratuito.
  */
 export type FinancialInsightsResponse = {
   insights: FinancialInsight[];
   artificialInsight: ArtificialInsight | null;
+  /** Plano gratuito: só o primeiro insight, sem a análise da MI. */
+  isPreview: boolean;
+  /** Insights escondidos pela prévia, incluindo a análise da MI; 0 no Premium. */
+  lockedInsightsCount: number;
 };
 
 /** RequestChatMessageJson — POST /api/chat/message */

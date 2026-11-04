@@ -93,3 +93,41 @@ export type ExpenseCategorySummary = {
   categoryColor: string;
   percentage: number;
 };
+
+/** ResponseGoalForecastJson — previsão de uma meta de gasto (limite) do mês. */
+export type GoalForecast = {
+  categoryId: number;
+  categoryName: string;
+  targetAmount: number;
+  currentAmount: number;
+  projectedAmount: number;
+  /** A meta já passou de 100%. */
+  alreadyExceeded: boolean;
+  /** Mantido o ritmo, a meta estoura por volta de `estimatedExceedDay`. */
+  willExceed: boolean;
+  /** Dia do mês previsto para estourar; `null` quando não vai estourar. */
+  estimatedExceedDay: number | null;
+};
+
+/**
+ * ResponseMonthForecastJson — GET /api/dashboard/month-forecast (Premium; 403 sem assinatura).
+ * Sempre o mês corrente no horário de Brasília; todos os valores vêm calculados pela API.
+ */
+export type MonthForecast = {
+  year: number;
+  month: number;
+  today: number;
+  daysInMonth: number;
+  /** `false` com poucos dados (menos de 5 dias ou de 3 despesas): os números não são exibidos. */
+  isReliable: boolean;
+  /** Receitas lançadas no mês (não projetadas). */
+  income: number;
+  expenseToDate: number;
+  /** Despesas já lançadas para depois de hoje. */
+  scheduledExpense: number;
+  dailyExpenseRate: number;
+  projectedExpense: number;
+  /** Quanto sobra (positivo) ou falta (negativo) no fim do mês. */
+  projectedBalance: number;
+  goals: GoalForecast[];
+};

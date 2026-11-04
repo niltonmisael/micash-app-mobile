@@ -20,7 +20,7 @@ import { Skeleton } from '@/components/Skeleton';
 import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import { updateSessionName } from '@/lib/auth';
@@ -92,7 +92,7 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
           : 'Suas alterações foram salvas.',
       );
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       setSubmitError(
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );

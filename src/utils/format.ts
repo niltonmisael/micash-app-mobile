@@ -27,6 +27,21 @@ export function toDateKey(value: string): string {
   return Number.isNaN(date.getTime()) ? value.slice(0, 10) : localDateKey(date);
 }
 
+/** Brasília está em UTC−3 o ano todo (sem horário de verão desde 2019). */
+const BRASILIA_OFFSET_MS = -3 * 60 * 60 * 1000;
+
+/**
+ * DateTime UTC da API → "HH:mm" no horário de Brasília (ex.: `resetsAt` e `retryAt`, que viram
+ * à meia-noite de Brasília), independente do fuso do aparelho.
+ */
+export function formatBrasiliaTime(value: string): string {
+  const date = new Date(new Date(value).getTime() + BRASILIA_OFFSET_MS);
+  if (Number.isNaN(date.getTime())) return '';
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
 /** "05 out 2026" */
 export function formatDate(dateKey: string): string {
   const [year, month, day] = dateKey.split('-');

@@ -24,7 +24,7 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { TransactionRowSkeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import { deleteCategory, getCategories } from '@/lib/categories';
@@ -62,7 +62,7 @@ export default function CategoriesScreen() {
       await refresh();
       Alert.alert('Categoria excluída', category.name);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert(
         'Não foi possível excluir',
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',

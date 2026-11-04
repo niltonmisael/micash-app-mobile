@@ -21,7 +21,7 @@ import { ErrorNotice } from '@/components/ErrorNotice';
 import { TransactionRowSkeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
 import { ApiError } from '@/lib/api';
 import {
@@ -80,7 +80,7 @@ export default function NotificationCenterScreen() {
       setOlder({ firstId: firstPage[0]?.id, items: [...olderItems, ...page.notifications] });
       setOlderHasMore(page.hasMore);
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert('Não foi possível carregar', errorMessage(err));
     } finally {
       setLoadingMore(false);
@@ -106,7 +106,7 @@ export default function NotificationCenterScreen() {
       await runAuthenticated((token) => markAllNotificationsAsRead(token));
       markReadLocally(unread.map((notification) => notification.id));
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert('Não foi possível marcar como lidas', errorMessage(err));
     } finally {
       setMarkingAll(false);

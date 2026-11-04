@@ -5,7 +5,14 @@ import {
   fetchMonthlySummary,
   mergeTransactions,
 } from '@/lib/transactions';
-import type { DailySummary, DailySummaryDay, MonthlySummary, Transaction } from '@/types/dashboard';
+import type {
+  DailySummary,
+  DailySummaryDay,
+  GoalForecast,
+  MonthForecast,
+  MonthlySummary,
+  Transaction,
+} from '@/types/dashboard';
 import type { GoalLimit } from '@/types/goals';
 import { currentPeriod } from '@/utils/period';
 
@@ -15,6 +22,12 @@ export const LATEST_TRANSACTIONS_COUNT = 5;
 /** Limites de gasto exibidos no card "Metas" do Dashboard. */
 export const DASHBOARD_GOALS_COUNT = 2;
 
+/** Metas em risco exibidas no card "Previsão do mês". */
+export const FORECAST_GOALS_COUNT = 3;
+
+/** Previsão do mês; `'locked'` quando o usuário não tem assinatura ativa (403). */
+export type DashboardForecast = MonthForecast | 'locked';
+
 export type DashboardData = {
   summary: MonthlySummary;
   transactions: Transaction[];
@@ -22,6 +35,8 @@ export type DashboardData = {
   goals: GoalLimit[] | null;
   /** Dias do mês para o gráfico "Resumo do mês"; `null` quando não puderam ser carregados. */
   daily: DailySummaryDay[] | null;
+  /** `null` quando a previsão não pôde ser carregada. */
+  forecast: DashboardForecast | null;
 };
 
 /**
@@ -57,6 +72,36 @@ async function loadDailySummary(token: string, now: Date): Promise<DailySummaryD
 }
 
 /**
+ * GET /api/dashboard/month-forecast — Premium. O 403 (sem assinatura) não é erro: vira o card
+ * bloqueado. Outras falhas só deixam o card "indisponível"; o 401 continua sendo propagado.
+ */
+async function loadMonthForecast(token: string): Promise<DashboardForecast | null> {
+  try {
+    return await apiGet<MonthForecast>('/api/dashboard/month-forecast', token);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) throw error;
+    if (error instanceof ApiError && error.status === 403) return 'locked';
+    return null;
+  }
+}
+
+/**
+ * Metas que a API marcou como estouradas ou com estouro previsto, as já estouradas primeiro e as
+ * demais pelo dia previsto. Metas dentro do previsto ficam de fora.
+ */
+export function forecastGoalsAtRisk(
+  goals: GoalForecast[],
+  count: number = FORECAST_GOALS_COUNT,
+): GoalForecast[] {
+  const rank = (goal: GoalForecast) =>
+    goal.alreadyExceeded ? 0 : (goal.estimatedExceedDay ?? Number.MAX_SAFE_INTEGER);
+  return goals
+    .filter((goal) => goal.alreadyExceeded || goal.willExceed)
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, count);
+}
+
+/**
  * Dias que o gráfico desenha: no mês corrente, só até hoje. Os dias seguintes repetiriam o
  * acumulado de hoje e pareceriam lançamentos que ainda não existem.
  */
@@ -66,11 +111,12 @@ export function chartDays(days: DailySummaryDay[], now: Date = new Date()): Dail
 
 /** Busca os dados do Dashboard para o mês corrente (data local do aparelho). */
 export async function getDashboard(token: string, now: Date = new Date()): Promise<DashboardData> {
-  const [summary, latest, goals, daily] = await Promise.all([
+  const [summary, latest, goals, daily, forecast] = await Promise.all([
     fetchMonthlySummary(token, now),
     fetchLatestTransactions(token, LATEST_TRANSACTIONS_COUNT),
     loadDashboardGoals(token, now),
     loadDailySummary(token, now),
+    loadMonthForecast(token),
   ]);
 
   return {
@@ -78,5 +124,6 @@ export async function getDashboard(token: string, now: Date = new Date()): Promi
     transactions: mergeTransactions(latest.incomes, latest.expenses, LATEST_TRANSACTIONS_COUNT),
     goals,
     daily,
+    forecast,
   };
 }

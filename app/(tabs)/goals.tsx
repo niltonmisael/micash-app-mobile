@@ -1,11 +1,13 @@
 import IconArrowLeft from '@tabler/icons-react-native/IconArrowLeft';
 import IconChevronLeft from '@tabler/icons-react-native/IconChevronLeft';
 import IconChevronRight from '@tabler/icons-react-native/IconChevronRight';
+import IconCrown from '@tabler/icons-react-native/IconCrown';
+import IconLock from '@tabler/icons-react-native/IconLock';
 import IconPencil from '@tabler/icons-react-native/IconPencil';
 import IconPlus from '@tabler/icons-react-native/IconPlus';
 import IconTrash from '@tabler/icons-react-native/IconTrash';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
@@ -23,16 +25,20 @@ import { BottomSheet } from '@/components/BottomSheet';
 import { CategoryIcon } from '@/components/CategoryIcon';
 import { ErrorNotice } from '@/components/ErrorNotice';
 import { GoalLimitRow } from '@/components/GoalLimitRow';
+import { PremiumLockedCard } from '@/components/PremiumLockedCard';
 import { SavingsGoalRow } from '@/components/SavingsGoalRow';
 import { SegmentedControl } from '@/components/SegmentedControl';
 import { TransactionRowSkeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
+import { PREMIUM_OFFERS } from '@/constants/plans';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
+import { usePlan } from '@/hooks/usePlan';
 import { ApiError } from '@/lib/api';
 import { copyGoals, deleteGoal, getGoalLimits } from '@/lib/goals';
 import { getSavingsGoals } from '@/lib/savings';
+import { isHistoryLocked, reachedLimit } from '@/lib/subscription';
 import type { GoalLimit } from '@/types/goals';
 import { formatCurrency } from '@/utils/format';
 import { currentPeriod, monthYearLabel, samePeriod, shiftPeriod } from '@/utils/period';
@@ -55,13 +61,28 @@ export default function GoalsScreen() {
   const tab: GoalTab = params.tab === 'limits' ? 'limits' : 'savings';
   // O mês fica aqui (e não na aba) para não se perder ao alternar entre Economia e Limites.
   const [period, setPeriod] = useState<MonthPeriod>(() => currentPeriod());
+  const { limits, showOffer } = usePlan();
+  // Quantas metas a aba visível mostra (caixinhas, ou limites do mês escolhido), para o plano.
+  const [count, setCount] = useState<number>();
 
   const now = currentPeriod();
   // Meses passados ficam só para consulta: não faz sentido criar ou copiar limites para eles.
   const isPast = period.year * 12 + period.month < now.year * 12 + now.month;
   const newDisabled = tab === 'limits' && isPast;
+  // No Free, criar acima do limite abre a oferta (a API também recusa com 403).
+  const atPlanLimit =
+    count !== undefined &&
+    reachedLimit(
+      tab === 'savings' ? limits?.maxSavingsGoals : limits?.maxFinancialGoalsPerMonth,
+      count,
+    );
 
   function openNew() {
+    if (atPlanLimit) {
+      if (tab === 'savings') showOffer(PREMIUM_OFFERS.savings, 'Caixinhas ilimitadas');
+      else showOffer(PREMIUM_OFFERS.goals, 'Metas ilimitadas');
+      return;
+    }
     if (tab === 'savings') {
       router.push({ pathname: '/goal-form', params: { type: 'savings' } });
       return;
@@ -76,7 +97,10 @@ export default function GoalsScreen() {
     <SegmentedControl
       options={TAB_OPTIONS}
       value={tab}
-      onChange={(next) => router.setParams({ tab: next })}
+      onChange={(next) => {
+        setCount(undefined);
+        router.setParams({ tab: next });
+      }}
       style={styles.tabs}
     />
   );
@@ -100,17 +124,21 @@ export default function GoalsScreen() {
           onPress={openNew}
           disabled={newDisabled}
           accessibilityRole="button"
-          accessibilityLabel={tab === 'savings' ? 'Nova meta de economia' : 'Novo limite de gasto'}
+          accessibilityLabel={`${tab === 'savings' ? 'Nova meta de economia' : 'Novo limite de gasto'}${atPlanLimit ? ', recurso Premium' : ''}`}
           accessibilityState={{ disabled: newDisabled }}
         >
-          <IconPlus size={18} color={colors.white} />
+          {atPlanLimit ? (
+            <IconCrown size={18} color={colors.white} />
+          ) : (
+            <IconPlus size={18} color={colors.white} />
+          )}
           <Text style={styles.newButtonText}>Nova</Text>
         </Pressable>
       </View>
 
       {/* Só a aba visível fica montada: cada uma carrega os próprios dados ao aparecer. */}
       {tab === 'savings' ? (
-        <SavingsTab tabs={tabs} onCreate={openNew} />
+        <SavingsTab tabs={tabs} onCreate={openNew} onCount={setCount} />
       ) : (
         <LimitsTab
           tabs={tabs}
@@ -118,6 +146,7 @@ export default function GoalsScreen() {
           onChangePeriod={setPeriod}
           isPast={isPast}
           onCreate={openNew}
+          onCount={setCount}
         />
       )}
     </SafeAreaView>
@@ -125,7 +154,15 @@ export default function GoalsScreen() {
 }
 
 /** Metas de economia (cofrinhos), na ordem da API: em andamento por prazo, depois concluídas. */
-function SavingsTab({ tabs, onCreate }: { tabs: ReactNode; onCreate: () => void }) {
+function SavingsTab({
+  tabs,
+  onCreate,
+  onCount,
+}: {
+  tabs: ReactNode;
+  onCreate: () => void;
+  onCount: (count: number | undefined) => void;
+}) {
   const router = useRouter();
   const {
     data: goals,
@@ -135,6 +172,10 @@ function SavingsTab({ tabs, onCreate }: { tabs: ReactNode; onCreate: () => void 
     refresh,
     retry,
   } = useAuthenticatedQuery(getSavingsGoals);
+
+  useEffect(() => {
+    onCount(goals?.length);
+  }, [goals, onCount]);
 
   return (
     <ScrollView
@@ -200,11 +241,13 @@ type LimitsTabProps = {
   onChangePeriod: (period: MonthPeriod) => void;
   isPast: boolean;
   onCreate: () => void;
+  onCount: (count: number | undefined) => void;
 };
 
 /** Limites de gasto por categoria do mês escolhido. */
-function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTabProps) {
+function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate, onCount }: LimitsTabProps) {
   const router = useRouter();
+  const { limits: plan, showOffer } = usePlan();
   const runAuthenticated = useAuthenticatedAction();
   const [menuLimit, setMenuLimit] = useState<GoalLimit>();
   const [busy, setBusy] = useState(false);
@@ -213,13 +256,24 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
     async (token: string) => ({ period, limits: await getGoalLimits(token, period) }),
     [period],
   );
-  const { data, loading, refreshing, error, refresh, retry } = useAuthenticatedQuery(fetchGoals);
+  const { data, locked, loading, refreshing, error, refresh, retry } =
+    useAuthenticatedQuery(fetchGoals);
 
   // Ao trocar o mês, os dados anteriores continuam visíveis (esmaecidos) até a resposta chegar.
   const changingPeriod = !!data && !samePeriod(data.period, period);
   const limits = data?.limits;
   const previous = shiftPeriod(period, -1);
   const lastPeriod = shiftPeriod(currentPeriod(), MONTHS_AHEAD);
+  // No Free, meses antes do histórico do plano ficam com cadeado.
+  const previousLocked = isHistoryLocked(plan, previous);
+  const maxGoals = plan?.maxFinancialGoalsPerMonth ?? null;
+  const canCopy = !plan || plan.canCopyFinancialGoals;
+  const showHistoryOffer = () => showOffer(PREMIUM_OFFERS.history, 'Histórico completo');
+
+  // Conta só as metas do mês escolhido (não as do mês anterior, ainda visíveis na troca).
+  useEffect(() => {
+    onCount(limits && !changingPeriod ? limits.length : undefined);
+  }, [limits, changingPeriod, onCount]);
 
   function editLimit(limit: GoalLimit) {
     setMenuLimit(undefined);
@@ -240,7 +294,7 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
       await runAuthenticated((token) => deleteGoal(token, limit.id));
       await refresh();
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert(
         'Não foi possível excluir',
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
@@ -256,7 +310,7 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
       await runAuthenticated((token) => copyGoals(token, previous, period));
       await refresh();
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       Alert.alert(
         'Não foi possível copiar',
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
@@ -285,8 +339,9 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
         <View style={styles.monthRow}>
           <MonthArrow
             direction="previous"
-            onPress={() => onChangePeriod(previous)}
+            onPress={previousLocked ? showHistoryOffer : () => onChangePeriod(previous)}
             label={monthYearLabel(previous)}
+            locked={previousLocked}
           />
           <View style={styles.monthCenter}>
             <Text style={styles.monthText}>{monthYearLabel(period)}</Text>
@@ -300,12 +355,27 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
           />
         </View>
 
+        {maxGoals !== null && limits && !changingPeriod && !isPast && (
+          <View style={styles.usageRow}>
+            {limits.length >= maxGoals && <IconCrown size={14} color={colors.primary} />}
+            <Text style={styles.usageText}>
+              {limits.length} de {maxGoals} metas
+            </Text>
+          </View>
+        )}
+
         {!!error && (
           <ErrorNotice message={error} onRetry={retry} retrying={loading || refreshing} />
         )}
 
         <View style={changingPeriod && styles.stale}>
-          {!limits ? (
+          {locked ? (
+            <PremiumLockedCard
+              title="Histórico completo"
+              message={locked}
+              onPress={() => showOffer(locked, 'Histórico completo')}
+            />
+          ) : !limits ? (
             loading ? (
               <View style={styles.card}>
                 {Array.from({ length: 3 }, (_, index) => (
@@ -332,17 +402,25 @@ function LimitsTab({ tabs, period, onChangePeriod, isPast, onCreate }: LimitsTab
                     <Text style={styles.emptyPrimaryText}>Criar limite</Text>
                   </Pressable>
                   <Pressable
-                    onPress={copyFromPrevious}
+                    onPress={
+                      canCopy
+                        ? copyFromPrevious
+                        : () => showOffer(PREMIUM_OFFERS.copyGoals, 'Copiar metas')
+                    }
                     disabled={busy}
                     hitSlop={8}
+                    style={styles.copyLink}
                     accessibilityRole="button"
                   >
                     {busy ? (
                       <ActivityIndicator color={colors.primary} />
                     ) : (
-                      <Text style={styles.emptyLink}>
-                        Copiar limites de {monthYearLabel(previous).toLowerCase()}
-                      </Text>
+                      <>
+                        {!canCopy && <IconCrown size={16} color={colors.primary} />}
+                        <Text style={styles.emptyLink}>
+                          Copiar limites de {monthYearLabel(previous).toLowerCase()}
+                        </Text>
+                      </>
                     )}
                   </Pressable>
                 </View>
@@ -410,13 +488,16 @@ function MonthArrow({
   label,
   onPress,
   disabled,
+  locked,
 }: {
   direction: 'previous' | 'next';
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  /** Mês fora do histórico do plano: cadeado no lugar da seta; o toque abre a oferta. */
+  locked?: boolean;
 }) {
-  const Icon = direction === 'previous' ? IconChevronLeft : IconChevronRight;
+  const Icon = locked ? IconLock : direction === 'previous' ? IconChevronLeft : IconChevronRight;
   return (
     <Pressable
       style={({ pressed }) => [styles.monthArrow, pressed && styles.menuPressed]}
@@ -424,10 +505,13 @@ function MonthArrow({
       disabled={disabled}
       hitSlop={6}
       accessibilityRole="button"
-      accessibilityLabel={`Ir para ${label}`}
+      accessibilityLabel={locked ? `${label}, histórico do Premium` : `Ir para ${label}`}
       accessibilityState={{ disabled }}
     >
-      <Icon size={20} color={disabled ? colors.grayInactive : colors.textPrimary} />
+      <Icon
+        size={20}
+        color={locked ? colors.primary : disabled ? colors.grayInactive : colors.textPrimary}
+      />
     </Pressable>
   );
 }
@@ -525,6 +609,24 @@ const styles = StyleSheet.create({
   },
   stale: {
     opacity: 0.5,
+  },
+  usageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: -4,
+    marginBottom: 12,
+  },
+  usageText: {
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    color: colors.textSecondary,
+  },
+  copyLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   card: {
     backgroundColor: colors.white,

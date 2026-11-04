@@ -1,6 +1,8 @@
 import IconCheck from '@tabler/icons-react-native/IconCheck';
 import IconChevronDown from '@tabler/icons-react-native/IconChevronDown';
-import { useCallback, useState } from 'react';
+import IconCrown from '@tabler/icons-react-native/IconCrown';
+import IconLock from '@tabler/icons-react-native/IconLock';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -16,11 +18,15 @@ import { BarChart } from '@/components/BarChart';
 import { BottomSheet } from '@/components/BottomSheet';
 import { DonutChart } from '@/components/DonutChart';
 import { ErrorNotice } from '@/components/ErrorNotice';
+import { PremiumLockedCard } from '@/components/PremiumLockedCard';
 import { Skeleton } from '@/components/Skeleton';
 import { colors } from '@/constants/colors';
+import { PREMIUM_OFFERS } from '@/constants/plans';
 import { fonts } from '@/constants/typography';
 import { useAuthenticatedQuery } from '@/hooks/useAuthenticatedQuery';
+import { usePlan } from '@/hooks/usePlan';
 import { EVOLUTION_MONTHS, getReport } from '@/lib/reports';
+import { isHistoryLocked } from '@/lib/subscription';
 import { formatCurrency, formatPercent } from '@/utils/format';
 import {
   currentPeriod,
@@ -34,12 +40,27 @@ import type { MonthPeriod } from '@/utils/period';
 /** Meses oferecidos no filtro: o atual e os 11 anteriores (a API aceita qualquer ano/mês). */
 const PERIOD_OPTIONS = 12;
 
+/** Tempo da animação de saída do seletor de período antes de abrir a oferta. */
+const MODAL_CLOSE_DELAY_MS = 350;
+
 export default function ReportsScreen() {
   const [period, setPeriod] = useState<MonthPeriod>(() => currentPeriod());
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const fetchReport = useCallback((token: string) => getReport(token, period), [period]);
-  const { data, loading, refreshing, error, refresh, retry } = useAuthenticatedQuery(fetchReport);
+  const { limits, showOffer } = usePlan();
+  // Lido por ref: a chegada dos limites não deve refazer a consulta, só as próximas os usam
+  // para pular os meses da evolução que o plano já bloqueia.
+  const limitsRef = useRef(limits);
+  useEffect(() => {
+    limitsRef.current = limits;
+  }, [limits]);
+  const fetchReport = useCallback(
+    (token: string) => getReport(token, period, limitsRef.current),
+    [period],
+  );
+  const { data, locked, loading, refreshing, error, refresh, retry } =
+    useAuthenticatedQuery(fetchReport);
+  const showHistoryOffer = () => showOffer(PREMIUM_OFFERS.history, 'Histórico completo');
 
   // Ao trocar o período, os dados anteriores continuam visíveis (esmaecidos) até a resposta chegar.
   const changingPeriod = !!data && !samePeriod(data.period, period);
@@ -84,6 +105,14 @@ export default function ReportsScreen() {
           <ErrorNotice message={error} onRetry={retry} retrying={loading || refreshing} />
         )}
 
+        {locked && (
+          <PremiumLockedCard
+            title="Histórico completo"
+            message={locked}
+            onPress={() => showOffer(locked, 'Histórico completo')}
+          />
+        )}
+
         <View style={[styles.card, changingPeriod && styles.stale]}>
           <Text style={styles.cardTitle}>Despesas por categoria</Text>
           {!data ? (
@@ -96,7 +125,9 @@ export default function ReportsScreen() {
                 </View>
               </View>
             ) : (
-              <Text style={styles.emptyText}>Relatório indisponível no momento.</Text>
+              <Text style={styles.emptyText}>
+                {locked ? 'Disponível no Premium.' : 'Relatório indisponível no momento.'}
+              </Text>
             )
           ) : data.categories.length === 0 ? (
             <Text style={styles.emptyText}>Nenhuma despesa registrada neste período.</Text>
@@ -149,7 +180,9 @@ export default function ReportsScreen() {
             loading ? (
               <Skeleton width={280} height={130} />
             ) : (
-              <Text style={styles.emptyText}>Evolução indisponível no momento.</Text>
+              <Text style={styles.emptyText}>
+                {locked ? 'Disponível no Premium.' : 'Evolução indisponível no momento.'}
+              </Text>
             )
           ) : !hasEvolution ? (
             <Text style={styles.emptyText}>
@@ -165,6 +198,19 @@ export default function ReportsScreen() {
               }))}
             />
           )}
+          {data?.historyLocked && (
+            <Pressable
+              style={styles.premiumLink}
+              onPress={showHistoryOffer}
+              hitSlop={8}
+              accessibilityRole="button"
+            >
+              <IconCrown size={16} color={colors.primary} />
+              <Text style={styles.premiumLinkText}>
+                Veja os {EVOLUTION_MONTHS} meses com o Premium
+              </Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
 
@@ -175,21 +221,35 @@ export default function ReportsScreen() {
         <ScrollView style={styles.sheetList}>
           {periodOptions.map((option) => {
             const selected = samePeriod(option, period);
+            // No Free, meses antes do histórico do plano abrem a oferta em vez do relatório.
+            const optionLocked = isHistoryLocked(limits, option);
             return (
               <Pressable
                 key={`${option.year}-${option.month}`}
                 style={({ pressed }) => [styles.option, pressed && styles.optionPressed]}
                 onPress={() => {
-                  setPeriod(option);
                   setPickerOpen(false);
+                  // A oferta é outro Modal: no iOS ele só abre depois que o seletor fecha.
+                  if (optionLocked) setTimeout(showHistoryOffer, MODAL_CLOSE_DELAY_MS);
+                  else setPeriod(option);
                 }}
                 accessibilityRole="button"
+                accessibilityLabel={
+                  optionLocked ? `${periodLabel(option)}, histórico do Premium` : undefined
+                }
                 accessibilityState={{ selected }}
               >
-                <Text style={[styles.optionText, selected && styles.optionTextSelected]}>
+                <Text
+                  style={[
+                    styles.optionText,
+                    selected && styles.optionTextSelected,
+                    optionLocked && styles.optionTextLocked,
+                  ]}
+                >
                   {periodLabel(option)}
                 </Text>
                 {selected && <IconCheck size={20} color={colors.primary} />}
+                {optionLocked && <IconLock size={18} color={colors.primary} />}
               </Pressable>
             );
           })}
@@ -346,6 +406,21 @@ const styles = StyleSheet.create({
   },
   optionTextSelected: {
     fontFamily: fonts.semiBold,
+    color: colors.primary,
+  },
+  optionTextLocked: {
+    color: colors.textSecondary,
+  },
+  premiumLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 14,
+  },
+  premiumLinkText: {
+    fontFamily: fonts.medium,
+    fontSize: 14,
     color: colors.primary,
   },
 });

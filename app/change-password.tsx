@@ -18,7 +18,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { TextField } from '@/components/TextField';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { SessionEndedError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
+import { HandledActionError, useAuthenticatedAction } from '@/hooks/useAuthenticatedAction';
 import { ApiError } from '@/lib/api';
 import { login } from '@/lib/auth';
 import { changePassword, getProfile } from '@/lib/user';
@@ -106,7 +106,7 @@ export default function ChangePasswordScreen() {
       setShowErrors(false);
       Alert.alert('Senha atualizada', 'Use a nova senha na próxima vez que entrar.');
     } catch (err) {
-      if (err instanceof SessionEndedError) return;
+      if (err instanceof HandledActionError) return;
       setSubmitError(
         err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
       );
