@@ -1,19 +1,33 @@
 // Contratos de usuário e assinatura de MiCash.API (MiCash.Communication).
 
-/** ResponseUserProfileJson — GET /api/user/profile. A API não devolve telefone. */
+/** ResponseUserProfileJson — GET /api/user/profile. */
 export type UserProfile = {
   name: string;
   email: string;
   emailVerified: boolean;
+  /** Só dígitos (DDD + número, ex.: "11987654321"); vazio quando a conta não tem. */
+  phone: string;
 };
 
 /**
- * RequestUpdateUserJson — PUT /api/user/update. Só o nome muda aqui: o e-mail precisa ser o atual
+ * RequestUpdateUserJson — PUT /api/user/update. Muda o nome e o celular: o e-mail precisa ser o atual
  * (outro e-mail = 400 `EMAIL_CHANGE_REQUIRES_CONFIRMATION`; a troca é feita em `change-email`).
  */
 export type UpdateProfileRequest = {
   name: string;
   email: string;
+  /** Celular só com dígitos. Omitido = a API mantém o atual. */
+  phone?: string;
+};
+
+/**
+ * GET/PUT /api/user/notification-preferences. O resumo mensal sai no dia 1 (mês que terminou), por
+ * e-mail e/ou push; "novidades" é marketing e começa desligado (a pessoa precisa ativar).
+ */
+export type NotificationPreferences = {
+  monthlySummaryEmail: boolean;
+  monthlySummaryPush: boolean;
+  newsEmail: boolean;
 };
 
 /** RequestChangePasswordJson — PUT /api/user/change-password (a confirmação não é enviada). */

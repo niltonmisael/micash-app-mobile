@@ -193,11 +193,20 @@ export function validateSavingsMovementForm(
   return errors;
 }
 
-export type ProfileFormErrors = Partial<Record<'name' | 'email', string>>;
+export type ProfileFormErrors = Partial<Record<'name' | 'email' | 'phone', string>>;
 
-/** Espelha o UpdateUserValidator da API (nome obrigatório, e-mail obrigatório e válido). */
-export function validateProfileForm(values: { name: string; email: string }): ProfileFormErrors {
+/**
+ * Espelha o UpdateUserValidator da API (nome obrigatório, e-mail obrigatório e válido, celular
+ * válido quando informado; vazio não é enviado e a API mantém o atual).
+ */
+export function validateProfileForm(values: {
+  name: string;
+  email: string;
+  phone?: string;
+}): ProfileFormErrors {
   const errors: ProfileFormErrors = {};
+  if (values.phone && !isValidMobilePhone(values.phone))
+    errors.phone = 'Informe um celular válido com DDD, ex.: (11) 98765-4321.';
   if (!values.name.trim()) errors.name = 'Informe seu nome completo.';
   if (!values.email.trim()) errors.email = 'Informe seu e-mail.';
   else if (!isValidEmail(values.email)) errors.email = 'E-mail inválido.';

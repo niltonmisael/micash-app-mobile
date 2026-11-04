@@ -193,6 +193,14 @@ describe('validateProfileForm', () => {
       email: 'E-mail inválido.',
     });
   });
+
+  it('valida o celular só quando informado', () => {
+    const base = { name: 'Nilton', email: 'nilton@micash.com.br' };
+    expect(validateProfileForm({ ...base, phone: '' })).toEqual({});
+    expect(validateProfileForm({ ...base, phone: '1198765432' })).toEqual({
+      phone: 'Informe um celular válido com DDD, ex.: (11) 98765-4321.',
+    });
+  });
 });
 
 describe('validateChangePasswordForm', () => {

@@ -35,14 +35,27 @@ import {
   sendTestPushNotification,
 } from '@/lib/notifications';
 import type { NotificationPermissionState, PushUnsupportedReason } from '@/lib/notifications';
+import { getNotificationPreferences, updateNotificationPreferences } from '@/lib/user';
 import type { PushDevice } from '@/types/notifications';
+import type { NotificationPreferences } from '@/types/user';
 import { formatDate, toDateKey } from '@/utils/format';
 
-const PREFERENCES = [
-  'Resumo diário',
-  'Contas a vencer',
-  'Lembrete de lançamentos',
-  'Metas atingidas',
+/** Opções gravadas na API (GET/PUT /api/user/notification-preferences). */
+const SUMMARY_PREFERENCES: {
+  key: keyof NotificationPreferences;
+  label: string;
+  description: string;
+}[] = [
+  {
+    key: 'monthlySummaryPush',
+    label: 'Resumo mensal no app',
+    description: 'No dia 1, uma notificação com o resumo do mês que terminou.',
+  },
+  {
+    key: 'monthlySummaryEmail',
+    label: 'Resumo mensal por e-mail',
+    description: 'Receitas, despesas, maiores categorias e metas do mês, no seu e-mail.',
+  },
 ];
 
 const UNSUPPORTED_MESSAGES: Record<PushUnsupportedReason, string> = {
@@ -76,8 +89,8 @@ const isCurrentDevice = (device: PushDevice, currentSuffix?: string) =>
 
 /**
  * Notificações push: situação deste aparelho (permissão e registro na API) e aparelhos da conta
- * (GET /api/device/push-tokens). A API ainda não guarda preferências por tipo de aviso: essas
- * opções continuam desligadas e bloqueadas.
+ * (GET /api/device/push-tokens), e as preferências de resumo mensal e comunicações
+ * (GET/PUT /api/user/notification-preferences).
  */
 export default function NotificationsScreen() {
   const runAuthenticated = useAuthenticatedAction();
@@ -218,34 +231,83 @@ export default function NotificationsScreen() {
           />
         )}
 
-        <Text style={styles.sectionTitle}>Avisos</Text>
-        <View style={styles.notice}>
-          <Text style={styles.noticeTitle}>Em breve</Text>
-          <Text style={styles.noticeText}>
-            Em breve você poderá escolher quais avisos quer receber.
-          </Text>
-        </View>
-        <View style={styles.card}>
-          {PREFERENCES.map((label, index) => (
-            <MenuRow
-              key={label}
-              label={label}
-              disabled
-              divider={index < PREFERENCES.length - 1}
-              right={
-                <Switch
-                  value={false}
-                  disabled
-                  accessibilityLabel={`${label} (indisponível)`}
-                  trackColor={{ false: colors.border, true: colors.primarySoft }}
-                  thumbColor={colors.white}
-                />
-              }
-            />
-          ))}
-        </View>
+        <Preferences />
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+/**
+ * Resumo mensal (push e e-mail) e novidades. O interruptor muda na hora e volta se a API recusar.
+ * Carrega à parte dos aparelhos: um erro em um não esconde o outro.
+ */
+function Preferences() {
+  const runAuthenticated = useAuthenticatedAction();
+  const { data, error, retry, loading, refreshing } = useAuthenticatedQuery(
+    getNotificationPreferences,
+  );
+  const [local, setLocal] = useState<NotificationPreferences>();
+  const preferences = local ?? data;
+
+  async function change(key: keyof NotificationPreferences, value: boolean) {
+    if (!preferences) return;
+    const previous = preferences;
+    const next = { ...preferences, [key]: value };
+    setLocal(next);
+    try {
+      setLocal(await runAuthenticated((token) => updateNotificationPreferences(token, next)));
+    } catch (err) {
+      setLocal(previous);
+      if (err instanceof HandledActionError) return;
+      Alert.alert(
+        'Não foi possível salvar',
+        err instanceof ApiError ? err.message : 'Ocorreu um erro inesperado. Tente novamente.',
+      );
+    }
+  }
+
+  const toggle = (key: keyof NotificationPreferences, label: string) =>
+    preferences ? (
+      <Switch
+        value={preferences[key]}
+        onValueChange={(value) => change(key, value)}
+        accessibilityLabel={label}
+        trackColor={{ false: colors.border, true: colors.primary }}
+        thumbColor={colors.white}
+      />
+    ) : (
+      <Skeleton width={44} height={24} />
+    );
+
+  return (
+    <>
+      <Text style={styles.sectionTitle}>Resumo mensal</Text>
+      {!!error && <ErrorNotice message={error} onRetry={retry} retrying={loading || refreshing} />}
+      <View style={styles.card}>
+        {SUMMARY_PREFERENCES.map((item, index) => (
+          <MenuRow
+            key={item.key}
+            label={item.label}
+            description={item.description}
+            divider={index < SUMMARY_PREFERENCES.length - 1}
+            right={toggle(item.key, item.label)}
+          />
+        ))}
+      </View>
+
+      <Text style={styles.sectionTitle}>Comunicações</Text>
+      <View style={styles.card}>
+        <MenuRow
+          label="Novidades e ofertas"
+          description="E-mails sobre novos recursos e condições especiais. Você pode sair quando quiser."
+          divider={false}
+          right={toggle('newsEmail', 'Novidades e ofertas')}
+        />
+      </View>
+      <Text style={styles.footnote}>
+        E-mails sobre a sua conta (códigos, segurança e cobranças) são sempre enviados.
+      </Text>
+    </>
   );
 }
 
@@ -363,21 +425,11 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: 20,
   },
-  notice: {
-    backgroundColor: colors.beige,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    gap: 4,
-  },
-  noticeTitle: {
-    fontFamily: fonts.semiBold,
-    fontSize: 15,
-    color: colors.primary,
-  },
-  noticeText: {
+  footnote: {
     fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.textPrimary,
+    fontSize: 13,
+    color: colors.textSecondary,
+    marginTop: -4,
+    marginBottom: 12,
   },
 });

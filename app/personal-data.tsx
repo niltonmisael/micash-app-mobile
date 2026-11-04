@@ -1,3 +1,4 @@
+import IconDeviceMobile from '@tabler/icons-react-native/IconDeviceMobile';
 import IconMail from '@tabler/icons-react-native/IconMail';
 import IconUser from '@tabler/icons-react-native/IconUser';
 import { useRouter } from 'expo-router';
@@ -28,6 +29,7 @@ import { ApiError } from '@/lib/api';
 import { updateSessionName } from '@/lib/auth';
 import { getProfile, updateProfile } from '@/lib/user';
 import type { UserProfile } from '@/types/user';
+import { formatPhone, phoneDigits } from '@/utils/format';
 import { validateProfileForm } from '@/utils/validation';
 
 export default function PersonalDataScreen() {
@@ -42,7 +44,7 @@ export default function PersonalDataScreen() {
         <ScreenHeader title="Dados pessoais" />
         {data ? (
           // `key` recria o formulário com os dados novos depois de salvar e recarregar.
-          <ProfileForm key={`${data.name}|${data.email}`} profile={data} />
+          <ProfileForm key={`${data.name}|${data.email}|${data.phone}`} profile={data} />
         ) : (
           <View style={styles.content}>
             {error ? (
@@ -65,28 +67,30 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
   const router = useRouter();
   const runAuthenticated = useAuthenticatedAction();
   const [name, setName] = useState(profile.name);
+  const [phone, setPhone] = useState(profile.phone ?? '');
   const [saved, setSaved] = useState(profile);
   const [showErrors, setShowErrors] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
 
-  // O e-mail não muda aqui (a API exige o código no novo endereço): vai como está, só o nome muda.
-  const errors = validateProfileForm({ name, email: saved.email });
-  const changed = name.trim() !== saved.name;
+  // O e-mail não muda aqui (a API exige o código no novo endereço): vai como está.
+  const errors = validateProfileForm({ name, email: saved.email, phone });
+  const changed = name.trim() !== saved.name || phone !== (saved.phone ?? '');
 
   async function handleSave() {
     if (submitting) return;
     setShowErrors(true);
     if (Object.keys(errors).length > 0) return;
 
-    const data = { name: name.trim(), email: saved.email };
+    // Celular vazio não é enviado: a API mantém o atual.
+    const data = { name: name.trim(), email: saved.email, ...(phone ? { phone } : {}) };
     setSubmitError(undefined);
     setSubmitting(true);
     try {
       await runAuthenticated((token) => updateProfile(token, data));
       // O nome também fica na sessão (saudação do Dashboard).
       await updateSessionName(data.name);
-      setSaved({ ...saved, name: data.name });
+      setSaved({ ...saved, name: data.name, phone: phone || saved.phone });
       setShowErrors(false);
       Alert.alert('Dados atualizados', 'Suas alterações foram salvas.');
     } catch (err) {
@@ -123,6 +127,20 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
           editable={!submitting}
         />
         <TextField
+          label="Celular"
+          icon={IconDeviceMobile}
+          value={formatPhone(phone)}
+          // Guarda só os dígitos; a máscara "(11) 98765-4321" é aplicada na exibição.
+          onChangeText={(text) => setPhone(phoneDigits(text))}
+          error={showErrors ? errors.phone : undefined}
+          placeholder="(11) 98765-4321"
+          maxLength={20}
+          keyboardType="phone-pad"
+          autoComplete="tel"
+          textContentType="telephoneNumber"
+          editable={!submitting}
+        />
+        <TextField
           label="E-mail"
           icon={IconMail}
           value={saved.email}
@@ -141,7 +159,6 @@ function ProfileForm({ profile }: { profile: UserProfile }) {
         />
         <Text style={styles.hint}>
           O e-mail é usado para entrar no app. Para trocá-lo, enviamos um código ao novo endereço.
-          Telefone ainda não pode ser editado por aqui.
         </Text>
       </View>
 
