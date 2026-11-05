@@ -135,7 +135,7 @@ describe('assistant', () => {
         lockedInsightsCount: 3,
       });
       expect(fetchMock.mock.calls[0][0]).toBe(
-        'http://api.test/api/financialinsights?month=11&year=2026',
+        'http://api.test/api/financial-insights?month=11&year=2026',
       );
     });
   });

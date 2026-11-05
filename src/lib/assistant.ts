@@ -37,7 +37,7 @@ export function chatErrorMessage(error: unknown): string {
 }
 
 /**
- * GET /api/financialinsights?month&year — regras fixas + análise da IA (cache de 15 min). No
+ * GET /api/financial-insights?month&year — regras fixas + análise da IA (cache de 15 min). No
  * plano gratuito vem a prévia (`isPreview`): um insight, sem a análise da IA.
  */
 export async function getInsights(
@@ -45,7 +45,7 @@ export async function getInsights(
   period: MonthPeriod,
 ): Promise<FinancialInsightsResponse> {
   const response = await apiGet<FinancialInsightsResponse>(
-    '/api/financialinsights',
+    '/api/financial-insights',
     token,
     { month: period.month, year: period.year },
     { timeoutMs: AI_REQUEST_TIMEOUT_MS },

@@ -22,7 +22,7 @@ export type ArtificialInsight = {
 };
 
 /**
- * ResponseFinancialInsightsJson — GET /api/financialinsights?month&year.
+ * ResponseFinancialInsightsJson — GET /api/financial-insights?month&year.
  * `artificialInsight` é `null` quando a IA falhou (a API ainda devolve as regras fixas) e na
  * prévia do plano gratuito.
  */
