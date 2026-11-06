@@ -1,4 +1,4 @@
-import { apiGet, apiPut } from '@/lib/api';
+import { apiDelete, apiGet, apiPut } from '@/lib/api';
 import type {
   ChangePasswordRequest,
   NotificationPreferences,
@@ -47,4 +47,12 @@ export async function updateNotificationPreferences(
     token,
   );
   return saved ?? data;
+}
+
+/**
+ * DELETE /api/user/delete — exclui a conta e todos os dados. A API confere a senha atual (400 se
+ * errada) e cancela antes a assinatura no Pagar.me (503 se o Pagar.me falhar; nada é apagado).
+ */
+export async function deleteAccount(token: string, password: string): Promise<void> {
+  await apiDelete('/api/user/delete', token, { password });
 }

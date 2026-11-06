@@ -1,15 +1,12 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { AppLogo } from '@/components/AppLogo';
-import { PrimaryButton } from '@/components/PrimaryButton';
 import { colors } from '@/constants/colors';
 import { fonts } from '@/constants/typography';
-import { getSession, isSessionVerified, logout } from '@/lib/auth';
-import { authenticateWithBiometrics } from '@/lib/biometrics';
-import { getSettings } from '@/lib/settings';
+import { getSession, isSessionVerified } from '@/lib/auth';
 
 const SPLASH_DURATION_MS = 2000;
 
@@ -17,33 +14,20 @@ const WAVE_PATH = 'M0 60 C30 30 50 70 80 50 S130 20 160 45 S220 70 250 30 L280 4
 
 export default function SplashScreen() {
   const router = useRouter();
-  const [locked, setLocked] = useState(false);
-
-  async function unlock() {
-    // Trava local: a biometria só libera a sessão já salva; não substitui o login na API.
-    if (await authenticateWithBiometrics('Desbloquear o MiCash')) router.replace('/home');
-  }
-
-  async function signInWithPassword() {
-    await logout();
-    router.replace('/login');
-  }
 
   useEffect(() => {
     let active = true;
-    const startup = Promise.all([getSession(), getSettings()]);
+    const startup = getSession();
 
     // `replace` remove a Splash do histórico: o "voltar" não retorna aqui.
     const timer = setTimeout(async () => {
-      const [session, settings] = await startup;
+      const session = await startup;
       if (!active) return;
       if (!session) router.replace('/login');
       // E-mail ainda não confirmado: a tela do código vem antes de tudo (a API bloqueia o resto).
       else if (!isSessionVerified(session)) router.replace('/verify-email');
-      else if (!settings.biometrics) router.replace('/home');
-      else if (await authenticateWithBiometrics('Desbloquear o MiCash')) {
-        if (active) router.replace('/home');
-      } else if (active) setLocked(true);
+      // Com a biometria ligada, a trava (AppLock, em app/_layout.tsx) já cobre a tela.
+      else router.replace('/home');
     }, SPLASH_DURATION_MS);
 
     return () => {
@@ -62,15 +46,6 @@ export default function SplashScreen() {
         <Text style={styles.tagline}>
           {'Controle financeiro\nde forma simples\ne inteligente.'}
         </Text>
-        {locked && (
-          <View style={styles.locked}>
-            <Text style={styles.lockedText}>O MiCash está protegido por biometria.</Text>
-            <PrimaryButton title="Desbloquear" onPress={unlock} style={styles.unlockButton} />
-            <Pressable onPress={signInWithPassword} hitSlop={8} accessibilityRole="button">
-              <Text style={styles.passwordLink}>Entrar com e-mail e senha</Text>
-            </Pressable>
-          </View>
-        )}
       </View>
 
       <Svg
@@ -113,24 +88,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     color: colors.textSecondary,
     textAlign: 'center',
-  },
-  locked: {
-    alignItems: 'center',
-    gap: 14,
-    marginTop: 28,
-  },
-  lockedText: {
-    fontFamily: fonts.regular,
-    fontSize: 14,
-    color: colors.textSecondary,
-  },
-  unlockButton: {
-    width: 240,
-  },
-  passwordLink: {
-    fontFamily: fonts.semiBold,
-    fontSize: 14,
-    color: colors.primary,
   },
   wave: {
     position: 'absolute',

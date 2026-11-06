@@ -1,4 +1,4 @@
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Alert, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
@@ -39,6 +39,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function SettingsScreen() {
+  const router = useRouter();
   const [settings, setSettings] = useState<AppSettings>();
   const [biometrics, setBiometrics] = useState<BiometricAvailability>();
   const [saving, setSaving] = useState(false);
@@ -86,7 +87,7 @@ export default function SettingsScreen() {
   const biometricsDescription =
     biometrics && biometrics !== 'available'
       ? BIOMETRIC_UNAVAILABLE[biometrics]
-      : 'Pede digital ou rosto ao abrir o app.';
+      : 'Pede digital ou rosto ao abrir o app e ao voltar a ele.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -149,6 +150,16 @@ export default function SettingsScreen() {
                 accessibilityLabel="Biometria"
               />
             }
+          />
+        </Section>
+
+        <Section title="CONTA">
+          <MenuRow
+            label="Excluir minha conta"
+            description="Apaga a conta e todos os seus dados."
+            destructive
+            divider={false}
+            onPress={() => router.push('/delete-account')}
           />
         </Section>
       </ScrollView>

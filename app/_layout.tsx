@@ -4,6 +4,7 @@ import { Inter_600SemiBold } from '@expo-google-fonts/inter/600SemiBold';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 
+import { AppLock } from '@/components/AppLock';
 import { colors } from '@/constants/colors';
 import { PlanProvider } from '@/hooks/usePlan';
 import { configureForegroundNotifications } from '@/lib/notifications';
@@ -32,6 +33,8 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: colors.cream },
         }}
       />
+      {/* Depois do Stack: a trava fica por cima de todas as telas. */}
+      <AppLock />
     </PlanProvider>
   );
 }
